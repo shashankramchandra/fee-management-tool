@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Total Balance{% endblock %}
+{% block page_title %}<i class="fas fa-balance-scale" style="color:#27ae60"></i> Total Balance{% endblock %}
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+  <input type="text" id="search-tb" placeholder="🔍 Search student or ref..." class="form-control" style="width:260px;" oninput="filterSummary()"/>
+  <button class="btn btn-success btn-sm" onclick="window.location.href='/api/misc/export-excel'"><i class="fas fa-file-excel"></i> Export Excel</button>
+  <span id="tb-count" style="font-size:12px;color:var(--muted);"></span>
+</div>
+<div class="card">
+  <div class="card-header" style="background:#1e8449;"><i class="fas fa-table"></i><h3>Overall Summary</h3></div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrapper" style="max-height:75vh;overflow-y:auto;">
+      <table>
+        <thead><tr>
+          <th>#</th><th>UID</th><th>Ref No.</th><th>Student Name</th><th>Class</th><th>Section</th>
+          <th>Net Tuition</th>
+          <th>MISC to be Paid <button onclick="openMiscEdit('',0)" style="background:none;border:none;color:#f39c12;cursor:pointer;font-size:10px;padding:0 4px;" title="Edit MISC amount"><i class="fas fa-edit"></i></button></th>
+          <th>Total Payable</th><th>Tuition Paid</th><th>MISC Paid</th><th>Total Paid</th><th>Balance</th>
+        </tr></thead>
+        <tbody id="tb-tbody"></tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td colspan="5" style="text-align:right;">TOTALS</td>
+            <td id="tot-net-tuition"></td><td id="tot-misc-pay"></td>
+            <td id="tot-payable"></td><td id="tot-tuition-paid"></td>
+            <td id="tot-misc-paid"></td><td id="tot-paid"></td><td id="tot-balance"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MISC Edit Modal -->
+<div class="modal-overlay" id="misc-modal">
+  <div class="modal">
+    <h3><i class="fas fa-edit"></i> Edit MISC to be Paid</h3>
+    <p>Enter the MISC amount payable for this student.</p>
+    <div class="form-group"><label>Reference No. <span class="req">*</span></label><input class="form-control" id="misc-ref" placeholder="e.g. NA001 or RA001"/></div>
+    <div class="form-group"><label>MISC Amount to Pay (₹)</label><input type="number" class="form-control" id="misc-amount" placeholder="0" min="0"/></div>
+    <div id="misc-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('misc-modal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-success" onclick="saveMiscToPay()"><i class="fas fa-save"></i> Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let allSummary=[];
+window.addEventListener('load', loadSummary);
+async function loadSummary(){
+  allSummary = await apiGet('/api/misc/summary');
+  renderSummary(allSummary);
+  document.getElementById('tb-count').textContent = allSummary.length+' students';
+}
+function filterSummary(){
+  const q=document.getElementById('search-tb').value.toLowerCase();
+  renderSummary(allSummary.filter(r=>!q||(r.student_name||'').toLowerCase().includes(q)||(r.reference_no||'').toLowerCase().includes(q)));
+}
+function renderSummary(data){
+  const tbody=document.getElementById('tb-tbody');
+  let tots={net:0,misc:0,pay:0,tpaid:0,mpaid:0,paid:0,bal:0};
+  if(!data.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted);">No data</td></tr>';return;}
+  tbody.innerHTML=data.map((r,i)=>{
+    tots.net+=r.net_tuition||0; tots.misc+=r.misc_to_pay||0; tots.pay+=r.total_payable||0;
+    tots.tpaid+=r.tuition_paid||0; tots.mpaid+=r.misc_paid||0; tots.paid+=r.total_paid||0; tots.bal+=r.balance||0;
+    const bc=r.balance>0?'#e74c3c':r.balance<0?'#27ae60':'inherit';
+    const refTag=r.reference_no?(r.reference_no.startsWith('RA')?`<span class="tag tag-ra">${r.reference_no}</span>`:`<span class="tag tag-na">${r.reference_no}</span>`):'—';
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${refTag}</td>
+      <td style="font-family:monospace;font-size:11px;color:#8e44ad;">${r.student_uid||'—'}</td>
+      <td style="font-weight:600;">${r.student_name}${r.is_rte?'<span title="RTE" style="color:#8e44ad;font-size:10px;"> ⭐</span>':''}</td>
+      <td>${r.class||'—'}</td><td>${r.section||'—'}</td>
+      <td style="text-align:right;">${formatRs(r.net_tuition)}</td>
+      <td style="text-align:right;">
+        <a href="#" onclick="openMiscEdit('${r.reference_no}',${r.misc_to_pay||0});return false;">${formatRs(r.misc_to_pay)} <i class="fas fa-pen" style="font-size:9px;color:var(--muted)"></i></a>
+      </td>
+      <td style="text-align:right;font-weight:600;">${formatRs(r.total_payable)}</td>
+      <td style="text-align:right;color:#6c3483;">${formatRs(r.tuition_paid)}</td>
+      <td style="text-align:right;color:#2980b9;">${formatRs(r.misc_paid)}</td>
+      <td style="text-align:right;color:#1e8449;font-weight:600;">${formatRs(r.total_paid)}</td>
+      <td style="text-align:right;font-weight:700;color:${bc};">${formatRs(Math.abs(r.balance))}${r.balance>0?' Due':r.balance<0?' Over':''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tot-net-tuition').textContent=formatRs(tots.net);
+  document.getElementById('tot-misc-pay').textContent=formatRs(tots.misc);
+  document.getElementById('tot-payable').textContent=formatRs(tots.pay);
+  document.getElementById('tot-tuition-paid').textContent=formatRs(tots.tpaid);
+  document.getElementById('tot-misc-paid').textContent=formatRs(tots.mpaid);
+  document.getElementById('tot-paid').textContent=formatRs(tots.paid);
+  document.getElementById('tot-balance').textContent=formatRs(tots.bal);
+}
+function openMiscEdit(ref,amt){
+  document.getElementById('misc-ref').value=ref;
+  document.getElementById('misc-amount').value=amt||'';
+  document.getElementById('misc-alert').innerHTML='';
+  document.getElementById('misc-modal').classList.add('show');
+}
+async function saveMiscToPay(){
+  const ref=document.getElementById('misc-ref').value.trim();
+  const amt=parseFloat(document.getElementById('misc-amount').value)||0;
+  if(!ref) return showAlert(document.getElementById('misc-alert'),'danger','Reference number required');
+  const res=await apiPost('/api/misc/update-to-pay',{reference_no:ref,amount:amt});
+  if(res.success){document.getElementById('misc-modal').classList.remove('show');loadSummary();}
+  else showAlert(document.getElementById('misc-alert'),'danger',res.error);
+}
+</script>
+{% endblock %}

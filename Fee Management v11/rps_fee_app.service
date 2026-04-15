@@ -1,0 +1,14 @@
+[Unit]
+Description=Royal Public School Fee Management App
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/school_fee_app
+Environment="PATH=/root/school_fee_app/venv/bin"
+ExecStart=/root/school_fee_app/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 --timeout 120 wsgi:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

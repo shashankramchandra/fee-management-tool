@@ -1,0 +1,702 @@
+{% extends "base.html" %}
+{% block title %}Daily Report{% endblock %}
+{% block page_title %}<i class="fas fa-file-alt" style="color:var(--accent)"></i> Daily Report{% endblock %}
+
+{% block content %}
+<style>
+/* ── Report-specific styles ── */
+.rpt-section-head {
+  background: var(--primary);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+}
+.rpt-table { width:100%; border-collapse:collapse; font-size:12px; }
+.rpt-table td { padding:5px 8px; border-bottom:1px solid var(--border); }
+.rpt-table tr:last-child td { border-bottom:none; }
+.rpt-total td { background:#eaf4fb; font-weight:700; border-top:2px solid var(--primary); }
+.rpt-outstanding td { background:#fdedec; font-weight:800; border-top:2px solid #c0392b; font-size:14px; color:#c0392b; }
+.rpt-match td   { background:#eafaf1; font-weight:800; border-top:2px solid #27ae60; font-size:14px; color:#1e8449; }
+
+/* Collection boxes */
+.coll-box {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 90px;
+}
+.coll-box-head {
+  background: #f0f4f8;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+.coll-box-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  padding: 7px 6px;
+}
+.coll-box-sub {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+  padding: 0 6px 5px;
+}
+.coll-total-box {
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  background: #eaf4fb;
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+}
+.coll-total-box .big { font-size: 16px; font-weight: 800; color: var(--primary); }
+.coll-total-box .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-top: 2px; }
+
+@media print {
+  nav.sidebar, .topbar, .btn, #controls-bar { display: none !important; }
+  .main { margin-left: 0 !important; }
+  .content { padding: 4px !important; }
+  #report-body { display: block !important; }
+  body, #report-body { background: #fff !important; }
+  #report-body { box-shadow: none !important; border-radius: 0 !important; }
+  /* B&W print: replace colored backgrounds with light grey */
+  .rpt-section-head { background: #222 !important; color: #fff !important; }
+  .rpt-section-head.green-head { background: #444 !important; }
+  .rpt-section-head.grey-head  { background: #555 !important; }
+  .rpt-total td { background: #f0f0f0 !important; }
+  .rpt-outstanding td { background: #e8e8e8 !important; color: #000 !important; border-top-color: #000 !important; }
+  .rpt-match td   { background: #f0f0f0 !important; color: #000 !important; border-top-color: #000 !important; }
+  .coll-box { border: 1px solid #bbb !important; }
+  .coll-box-head { background: #e0e0e0 !important; color: #000 !important; }
+  .coll-total-box { background: #e0e0e0 !important; border-color: #000 !important; }
+  .coll-total-box .big, .coll-total-box .lbl { color: #000 !important; }
+  .rpt-header { background: #111 !important; }
+  .step-head { background: #eee !important; color: #333 !important; }
+}
+</style>
+
+<!-- Controls -->
+<div id="controls-bar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+  <div class="form-group" style="margin-bottom:0;">
+    <label>Report Date</label>
+    <input type="date" class="form-control" id="report-date" style="width:175px;"/>
+  </div>
+  <div class="form-group" style="margin-bottom:0;">
+    <label><i class="fas fa-lock" style="font-size:10px;"></i> Your Password</label>
+    <input type="password" class="form-control" id="report-password" placeholder="Enter your login password" style="width:200px;"/>
+  </div>
+  <button class="btn btn-primary" id="gen-btn"><i class="fas fa-sync"></i> Generate</button>
+  <button class="btn btn-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+  <button class="btn btn-secondary" onclick="loadReportLog()" style="background:#6c3483;border-color:#6c3483;"><i class="fas fa-history"></i> Report Log</button>
+  <span id="rpt-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
+  <span id="last-report-info" style="font-size:11px;color:#8e44ad;align-self:center;display:none;">
+    <i class="fas fa-clock"></i> Last report: <span id="last-report-time"></span>
+  </span>
+</div>
+
+<!-- Report Log Modal -->
+<div class="modal-overlay" id="report-log-modal">
+  <div class="modal" style="max-width:700px;">
+    <h3><i class="fas fa-history"></i> Daily Report Log</h3>
+    <p style="font-size:12px;color:var(--muted);">Reports are kept for 60 days then automatically deleted.</p>
+    <div class="table-wrapper" style="max-height:400px;overflow-y:auto;">
+      <table>
+        <thead><tr><th>#</th><th>Report Date</th><th>Generated By</th><th>Generated At</th></tr></thead>
+        <tbody id="report-log-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">Loading...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('report-log-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hint when not yet generated -->
+<div id="hint-section" style="text-align:center;padding:40px;color:var(--muted);">
+  <i class="fas fa-lock" style="font-size:32px;color:#bdc3c7;margin-bottom:12px;display:block;"></i>
+  <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Enter your password above and click Generate</div>
+  <div style="font-size:12px;">The daily report is password-protected. Enter your login password and select a date to generate.</div>
+</div>
+
+<!-- Blocking section -->
+<div id="block-section" style="display:none;margin-bottom:14px;">
+  <div class="card" style="border:2px solid var(--danger);">
+    <div class="card-header" style="background:#c0392b;">
+      <i class="fas fa-exclamation-triangle"></i>
+      <h3 id="block-title">Cannot Generate</h3>
+    </div>
+    <div id="block-message" style="padding:10px 14px 4px;color:#922b21;font-size:12px;">
+      Fill in <b>Net Tuition</b> and <b>MISC to Pay</b> for the students below in the
+      <a href="/total-balance" style="color:#c0392b;font-weight:700;">Total Balance</a> tab, then regenerate.
+    </div>
+    <div class="table-wrapper" style="padding:0 0 8px;">
+      <table class="rpt-table">
+        <thead><tr>
+          <th>#</th><th>Ref</th><th>Student</th><th>Class</th>
+          <th style="text-align:right">Net Tuition</th>
+          <th style="text-align:right">MISC to Pay</th>
+        </tr></thead>
+        <tbody id="block-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ MAIN REPORT ═══════ -->
+<div id="report-body" style="display:none;">
+
+  <!-- Header -->
+  <div class="rpt-header" style="background:var(--primary);color:#fff;border-radius:10px 10px 0 0;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <img src="/static/img/school_logo.png" style="max-height:38px;filter:brightness(0) invert(1);" onerror="this.style.display='none'">
+      <div>
+        <div style="font-size:15px;font-weight:800;letter-spacing:.4px;">ROYAL PUBLIC SCHOOL — DAILY REPORT</div>
+        <div id="hdr-date" style="font-size:11px;opacity:.75;margin-top:1px;"></div>
+      </div>
+    </div>
+    <div id="hdr-genby" style="font-size:10px;opacity:.5;text-align:right;"></div>
+  </div>
+
+  <div style="background:#fff;border-radius:0 0 10px 10px;box-shadow:0 2px 10px rgba(0,0,0,.08);overflow:hidden;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border);">
+
+    <!-- ══ LEFT COLUMN ══ -->
+    <div style="border-right:1px solid var(--border);">
+
+      <!-- Students -->
+      <div class="rpt-section-head">📚 Students</div>
+      <table class="rpt-table">
+        <thead>
+          <tr style="background:#f8f9fa;">
+            <td style="font-size:10px;font-weight:700;color:var(--muted);padding:4px 8px;"></td>
+            <td style="font-size:10px;font-weight:700;color:var(--muted);padding:4px 8px;text-align:right;width:70px;">TOTAL</td>
+            <td style="font-size:10px;font-weight:700;color:var(--muted);padding:4px 8px;text-align:right;width:70px;">TODAY</td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--muted);">Re-Admissions (RA)</td>
+            <td style="text-align:right;font-weight:600;"><span id="s-ra-total"></span></td>
+            <td style="text-align:right;font-weight:700;color:#2980b9;"><span id="s-ra-today"></span></td>
+          </tr>
+          <tr>
+            <td style="color:var(--muted);">New Admissions (NA)</td>
+            <td style="text-align:right;font-weight:600;"><span id="s-na-total"></span></td>
+            <td style="text-align:right;font-weight:700;color:#27ae60;"><span id="s-na-today"></span></td>
+          </tr>
+          <tr class="rpt-total">
+            <td>Total Admitted</td>
+            <td style="text-align:right;"><span id="s-total-admitted"></span></td>
+            <td style="text-align:right;color:var(--primary);"><span id="s-total-today"></span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Collection Today — matrix table in a box -->
+      <div class="rpt-section-head green-head" style="background:#1e6b3c;margin-top:1px;">💰 Collected Today</div>
+      <div style="padding:10px;">
+        <div style="border:2px solid var(--primary);border-radius:7px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--primary);color:#fff;">
+                <th style="padding:6px 10px;font-weight:600;font-size:11px;text-align:left;border-right:1px solid rgba(255,255,255,.2);"></th>
+                <th style="padding:6px 10px;font-weight:600;font-size:11px;text-align:right;border-right:1px solid rgba(255,255,255,.2);">NEFT</th>
+                <th style="padding:6px 10px;font-weight:600;font-size:11px;text-align:right;border-right:1px solid rgba(255,255,255,.2);">CASH</th>
+                <th style="padding:6px 10px;font-weight:600;font-size:11px;text-align:right;">ROW TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:7px 10px;font-weight:600;border-right:1px solid var(--border);">Tuition</td>
+                <td id="c-t-neft" style="padding:7px 10px;text-align:right;border-right:1px solid var(--border);color:#6c3483;font-weight:600;"></td>
+                <td id="c-t-cash" style="padding:7px 10px;text-align:right;border-right:1px solid var(--border);color:#1e8449;font-weight:600;"></td>
+                <td id="c-t-total" style="padding:7px 10px;text-align:right;font-weight:700;"></td>
+              </tr>
+              <tr style="background:#f8f9fa;border-bottom:1px solid var(--border);">
+                <td style="padding:7px 10px;font-weight:600;border-right:1px solid var(--border);">MISC</td>
+                <td id="c-m-neft" style="padding:7px 10px;text-align:right;border-right:1px solid var(--border);color:#6c3483;font-weight:600;"></td>
+                <td id="c-m-cash" style="padding:7px 10px;text-align:right;border-right:1px solid var(--border);color:#1e8449;font-weight:600;"></td>
+                <td id="c-m-total" style="padding:7px 10px;text-align:right;font-weight:700;"></td>
+              </tr>
+              <tr style="background:#eaf4fb;border-top:2px solid var(--primary);">
+                <td style="padding:8px 10px;font-weight:700;border-right:1px solid var(--border);">COL TOTAL</td>
+                <td id="c-neft"  style="padding:8px 10px;text-align:right;border-right:1px solid var(--border);font-weight:700;color:#6c3483;"></td>
+                <td id="c-cash"  style="padding:8px 10px;text-align:right;border-right:1px solid var(--border);font-weight:700;color:#1e8449;"></td>
+                <td id="c-grand" style="padding:8px 10px;text-align:right;font-weight:800;color:var(--primary);font-size:13px;"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- New admissions (conditional) -->
+      <div id="na-section" style="display:none;">
+        <div class="rpt-section-head" style="background:#27ae60;margin-top:1px;">✅ New Admissions Today</div>
+        <table class="rpt-table" style="font-size:11px;">
+          <tr style="background:#f0f8f4;">
+            <td style="font-weight:700;font-size:10px;">Ref</td>
+            <td style="font-weight:700;font-size:10px;">Name</td>
+            <td style="font-weight:700;font-size:10px;text-align:center;">Cls</td>
+            <td style="font-weight:700;font-size:10px;text-align:right;">Net Tuition</td>
+            <td style="font-weight:700;font-size:10px;text-align:right;">MISC</td>
+          </tr>
+          <tbody id="na-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Receipts today (conditional) -->
+      <div id="rcpt-section" style="display:none;margin-top:1px;">
+        <div class="rpt-section-head grey-head" style="background:#5b2c6f;">🧾 Receipts Today</div>
+        <table class="rpt-table" style="font-size:11px;">
+          <tr style="background:#f5eef8;">
+            <td style="font-weight:700;font-size:10px;">Receipt #</td>
+            <td style="font-weight:700;font-size:10px;">Student</td>
+            <td style="font-weight:700;font-size:10px;text-align:center;">Type</td>
+            <td style="font-weight:700;font-size:10px;text-align:center;">Mode</td>
+            <td style="font-weight:700;font-size:10px;text-align:right;">Amount</td>
+          </tr>
+          <tbody id="rcpt-tbody"></tbody>
+          <tr style="background:#3b1f5e;color:#fff;font-weight:700;">
+            <td colspan="4" style="padding:5px 8px;text-align:right;">TOTAL</td>
+            <td id="rcpt-total" style="padding:5px 8px;text-align:right;"></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Collection Breakdown: Tuition vs MISC -->
+      <div style="margin-top:1px;">
+        <div class="rpt-section-head" style="background:#1a3a5c;">📋 Collection Breakdown — Tuition vs MISC</div>
+        <table class="rpt-table">
+          <thead>
+            <tr>
+              <th style="text-align:left;background:#1a3a5c;color:#fff;">Type</th>
+              <th style="text-align:right;background:#1a3a5c;color:#fff;">NEFT</th>
+              <th style="text-align:right;background:#1a3a5c;color:#fff;">CASH</th>
+              <th style="text-align:right;background:#1a3a5c;color:#fff;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Tuition</td>
+              <td style="text-align:right;"><span id="bd-t-neft"></span></td>
+              <td style="text-align:right;"><span id="bd-t-cash"></span></td>
+              <td style="text-align:right;font-weight:700;"><span id="bd-t-total"></span></td>
+            </tr>
+            <tr style="background:#f2f2f2;">
+              <td>MISC</td>
+              <td style="text-align:right;"><span id="bd-m-neft"></span></td>
+              <td style="text-align:right;"><span id="bd-m-cash"></span></td>
+              <td style="text-align:right;font-weight:700;"><span id="bd-m-total"></span></td>
+            </tr>
+            <tr style="background:#1a3a5c;color:#fff;font-weight:700;">
+              <td>GRAND TOTAL</td>
+              <td style="text-align:right;"><span id="bd-total-neft"></span></td>
+              <td style="text-align:right;"><span id="bd-total-cash"></span></td>
+              <td style="text-align:right;"><span id="bd-grand-total"></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Fee Structure Changes Log -->
+      <div id="fee-changes-section" style="display:none;margin-top:1px;">
+        <div class="rpt-section-head" style="background:#6c3483;">⚠️ Fee Structure Changes Since Last Report</div>
+        <p style="font-size:11px;color:var(--muted);padding:6px 8px;margin:0;">These edits directly affected the outstanding balance.</p>
+        <table class="rpt-table" style="font-size:11px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">When</th>
+              <th style="text-align:left;">Student</th>
+              <th style="text-align:left;">Field</th>
+              <th style="text-align:right;">Old</th>
+              <th style="text-align:right;">New</th>
+              <th style="text-align:left;">By</th>
+            </tr>
+          </thead>
+          <tbody id="fee-changes-tbody"></tbody>
+        </table>
+      </div>
+
+    </div><!-- end left -->
+
+    <!-- ══ RIGHT COLUMN: Outstanding ══ -->
+    <div>
+      <div class="rpt-section-head">📊 Outstanding Balance</div>
+      <table class="rpt-table">
+
+        <!-- Step 1 -->
+        <tr>
+          <td colspan="2" class="step-head" style="background:#eaf4fb;padding:5px 8px 2px;font-size:10px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;">
+            Step 1 — Net Payable for Academic Year
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">Total Payable (Gross Tuition + MISC)</td>
+          <td id="o-total-payable" style="text-align:right;font-weight:600;"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">− Concessions</td>
+          <td id="o-conc" style="text-align:right;font-weight:600;color:#2980b9;"></td>
+        </tr>
+        <tr class="rpt-total">
+          <td>= Net Payable for Academic Year</td>
+          <td id="o-net-payable" style="text-align:right;color:var(--primary);font-size:13px;"></td>
+        </tr>
+
+        <!-- Step 2 -->
+        <tr>
+          <td colspan="2" class="step-head" style="background:#eaf4fb;padding:8px 8px 2px;font-size:10px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;">
+            Step 2 — Outstanding Today (Method A · Live)
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">Net Payable (Year)</td>
+          <td id="o-np2" style="text-align:right;font-weight:600;color:var(--primary);"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">− Collected So Far (all receipts)</td>
+          <td id="o-collected" style="text-align:right;font-weight:600;color:#27ae60;"></td>
+        </tr>
+        <tr class="rpt-outstanding">
+          <td>= Outstanding as of Today</td>
+          <td id="o-outstanding-A" style="text-align:right;"></td>
+        </tr>
+
+        <!-- Step 3 -->
+        <tr>
+          <td colspan="2" class="step-head" style="background:#eaf4fb;padding:8px 8px 2px;font-size:10px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;">
+            Step 3 — Cross-Check (Method B · Yesterday + Today)
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">Outstanding as of Yesterday</td>
+          <td id="o-yesterday" style="text-align:right;font-weight:600;color:#e74c3c;"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding-left:16px;">− Collected Today</td>
+          <td id="o-today-coll" style="text-align:right;font-weight:600;color:#27ae60;"></td>
+        </tr>
+        <tr id="o-match-row" class="rpt-match">
+          <td>= Outstanding as of Today &nbsp;<span id="match-badge"></span></td>
+          <td id="o-outstanding-B" style="text-align:right;"></td>
+        </tr>
+
+      </table>
+
+      <!-- Mismatch explanation -->
+      <div id="mismatch-box" style="display:none;padding:12px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:#6c3483;margin-bottom:6px;">⚠ Why the Two Methods Show Different Amounts</div>
+        <div id="mismatch-prose" style="font-size:11px;color:var(--text);line-height:1.8;"></div>
+        <div id="mismatch-detail" style="display:none;margin-top:10px;">
+          <table class="rpt-table" style="font-size:11px;">
+            <tr style="background:#5b2c6f;color:#fff;">
+              <td style="padding:5px 8px;font-weight:700;">#</td>
+              <td style="padding:5px 8px;font-weight:700;">Student</td>
+              <td style="padding:5px 8px;font-weight:700;">What Changed</td>
+              <td style="padding:5px 8px;font-weight:700;text-align:right;">Before</td>
+              <td style="padding:5px 8px;font-weight:700;text-align:right;">After</td>
+              <td style="padding:5px 8px;font-weight:700;">Time</td>
+            </tr>
+            <tbody id="mismatch-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- end right -->
+  </div>
+  </div>
+
+</div><!-- end report-body -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var t = new Date();
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  document.getElementById('report-date').value =
+    t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate());
+  document.getElementById('gen-btn').addEventListener('click', loadReport);
+})();
+
+async function loadReport(){
+  var date = document.getElementById('report-date').value;
+  var status = document.getElementById('rpt-status');
+  if(!date){ status.textContent = 'Please select a date.'; return; }
+
+  status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+  status.style.color = 'var(--muted)';
+
+  var data;
+  try {
+    var pw = document.getElementById('report-password').value;
+    var resp = await fetch('/api/daily-report?date=' + encodeURIComponent(date) + '&password=' + encodeURIComponent(pw));
+    var ct = resp.headers.get('content-type') || '';
+    if(!ct.includes('application/json')){
+      // Server returned HTML (likely login page) — session expired
+      status.innerHTML = '<span style="color:#e74c3c;">⚠ Session expired. Please <a href="/login">log in again</a>.</span>';
+      return;
+    }
+    data = await resp.json();
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message + ' — Try refreshing the page.';
+    return;
+  }
+
+  status.textContent = '';
+
+  if(!data.success){
+    document.getElementById('report-body').style.display = 'none';
+    document.getElementById('hint-section').style.display = 'none';
+    document.getElementById('block-section').style.display = 'block';
+    var errMsg = data.error || 'Unknown error';
+    // Password error — show clearly, not as "Missing Fee Values"
+    if(errMsg.toLowerCase().includes('password')){
+      document.getElementById('block-title').textContent = 'Password Required';
+      document.getElementById('block-message').innerHTML =
+        '<i class="fas fa-lock"></i> <b>' + errMsg + '</b><br>' +
+        'Enter your login password in the field above and click Generate again.';
+      if(document.getElementById('block-tbody'))
+        document.getElementById('block-tbody').innerHTML = '';
+    } else {
+      document.getElementById('block-title').textContent = 'Cannot Generate — Missing Fee Values';
+      document.getElementById('block-message').innerHTML =
+        'Fill in <b>Net Tuition</b> and <b>MISC to Pay</b> for the students below in the ' +
+        '<a href="/total-balance"><b>Total Balance</b></a> tab, then regenerate.';
+      if(data.incomplete_rows && data.incomplete_rows.length){
+        document.getElementById('block-tbody').innerHTML = data.incomplete_rows.map(function(s,i){
+          return '<tr style="'+(i%2?'background:#fdf2f2':'')+'">' +
+            '<td>'+(i+1)+'</td>' +
+            '<td style="font-family:monospace;font-weight:600">'+s.reference_no+'</td>' +
+            '<td style="font-weight:600">'+s.student_name+'</td>' +
+            '<td>'+(s.class||'—')+'</td>' +
+            '<td style="text-align:right">'+(s.net_tuition ? formatRs(s.net_tuition) : '<b style="color:#e74c3c">MISSING</b>')+'</td>' +
+            '<td style="text-align:right">'+(s.misc_to_pay ? formatRs(s.misc_to_pay) : '<b style="color:#e74c3c">MISSING</b>')+'</td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+    status.textContent = '';
+    return;
+  }
+
+  document.getElementById('block-section').style.display = 'none';
+  document.getElementById('hint-section').style.display = 'none';
+  document.getElementById('report-body').style.display = 'block';
+  // Show last report info
+  if(data.last_report_time && data.last_report_time !== '2000-01-01 00:00:00'){
+    document.getElementById('last-report-info').style.display='inline';
+    document.getElementById('last-report-time').textContent = data.last_report_time;
+  }
+
+  set('hdr-date', isoToDisplay(date));
+  set('hdr-genby', 'Generated: ' + isoToDisplay(new Date().toISOString().substring(0,10)) + '  ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));
+
+  // Students
+  set('s-ra-total',      data.total_ra);
+  set('s-na-total',      data.total_na);
+  set('s-rte-total',     data.total_rte || 0);
+  set('s-rte-ra',        data.total_rte_ra || 0);
+  set('s-rte-na',        data.total_rte_na || 0);
+  set('s-total-admitted',data.total_admitted);
+  set('s-ra-today',      data.new_ra_today   ? '+' + data.new_ra_today   : '—');
+  set('s-na-today',      data.new_na_today   ? '+' + data.new_na_today   : '—');
+  set('s-total-today',   data.new_admissions_today ? '+' + data.new_admissions_today : '—');
+
+  // New admissions list
+  if(data.new_admissions_list && data.new_admissions_list.length){
+    document.getElementById('na-section').style.display = 'block';
+    document.getElementById('na-tbody').innerHTML = data.new_admissions_list.map(function(s,i){
+      return '<tr style="'+(i%2?'background:#f9f9f9':'')+'">' +
+        '<td style="font-family:monospace;font-size:10px;padding:4px 8px">'+(s.reference_no||'—')+'</td>' +
+        '<td style="padding:4px 8px;font-weight:600">'+(s.student_name||'')+(s.is_rte?'<span style="color:#8e44ad;font-size:10px;"> ⭐RTE</span>':'')+'</td>' +
+        '<td style="padding:4px 8px;text-align:center">'+(s.class||'—')+'</td>' +
+        '<td style="padding:4px 8px;text-align:right">'+formatRs(s.net_tuition)+'</td>' +
+        '<td style="padding:4px 8px;text-align:right">'+formatRs(s.misc_to_pay)+'</td>' +
+        '</tr>';
+    }).join('');
+  } else {
+    document.getElementById('na-section').style.display = 'none';
+  }
+
+  // Collections — matrix
+  var tNeft = data.tuition_neft||0, tCash = data.tuition_cash||0;
+  var mNeft = data.misc_neft||0,    mCash = data.misc_cash||0;
+  set('c-t-neft',   formatRs(tNeft));
+  set('c-t-cash',   formatRs(tCash));
+  set('c-t-total',  formatRs(tNeft + tCash));
+  set('c-m-neft',   formatRs(mNeft));
+  set('c-m-cash',   formatRs(mCash));
+  set('c-m-total',  formatRs(mNeft + mCash));
+  set('c-neft',     formatRs(data.collected_neft));
+  set('c-cash',     formatRs(data.collected_cash));
+  set('c-grand',    formatRs(data.total_today));
+
+  // Breakdown table — Tuition vs MISC
+  set('bd-t-neft',     formatRs(data.tuition_neft||0));
+  set('bd-t-cash',     formatRs(data.tuition_cash||0));
+  set('bd-t-total',    formatRs(data.tuition_collected||0));
+  set('bd-m-neft',     formatRs(data.misc_neft||0));
+  set('bd-m-cash',     formatRs(data.misc_cash||0));
+  set('bd-m-total',    formatRs(data.misc_collected||0));
+  set('bd-total-neft', formatRs(data.collected_neft||0));
+  set('bd-total-cash', formatRs(data.collected_cash||0));
+  set('bd-grand-total',formatRs(data.total_today||0));
+
+  // Receipts
+  if(data.receipts_today && data.receipts_today.length){
+    document.getElementById('rcpt-section').style.display = 'block';
+    var tot = 0;
+    document.getElementById('rcpt-tbody').innerHTML = data.receipts_today.map(function(r,i){
+      tot += (r.amount||0);
+      var tc = r.fee_type==='TUITION'  ? '#d6eaf8' : '#d5f5e3';
+      var tt = r.fee_type==='TUITION'  ? '#1a5276' : '#1e8449';
+      var mc = r.payment_mode==='CASH' ? '#fef9e7' : '#f4ecf7';
+      var mt = r.payment_mode==='CASH' ? '#7d6608' : '#6c3483';
+      return '<tr style="'+(i%2?'background:#f9f9f9':'')+'">' +
+        '<td style="font-family:monospace;font-size:10px;padding:4px 8px">'+(r.receipt_no||'')+'</td>' +
+        '<td style="padding:4px 8px">'+(r.student_name||'')+'</td>' +
+        '<td style="padding:4px 8px;text-align:center"><span style="background:'+tc+';color:'+tt+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+(r.fee_type||'')+'</span></td>' +
+        '<td style="padding:4px 8px;text-align:center"><span style="background:'+mc+';color:'+mt+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+(r.payment_mode||'')+'</span></td>' +
+        '<td style="padding:4px 8px;text-align:right;font-weight:600">'+formatRs(r.amount)+'</td>' +
+        '</tr>';
+    }).join('');
+    set('rcpt-total', formatRs(tot));
+  } else {
+    document.getElementById('rcpt-section').style.display = 'none';
+  }
+
+  // Outstanding
+  var grossTotal   = data.gross_total||0;
+  var miscFees     = data.misc_total_fees||0;
+  var totalPayable = grossTotal + miscFees;
+  set('o-total-payable', formatRs(totalPayable));
+  set('o-conc',          '− ' + formatRs(data.concession_total||0));
+  set('o-net-payable',   formatRs(data.net_payable_academic_year||0));
+  set('o-np2',           formatRs(data.net_payable_academic_year||0));
+  set('o-collected',     '− ' + formatRs(data.collected_so_far||0));
+  set('o-outstanding-A', formatRs(data.outstanding_as_of_today||0));
+  set('o-yesterday',     formatRs(data.outstanding_yesterday||0));
+  set('o-today-coll',    '− ' + formatRs(data.total_today||0));
+  var outstandingB = (data.outstanding_yesterday||0) - (data.total_today||0);
+  set('o-outstanding-B', formatRs(outstandingB));
+
+  // Match/mismatch badge
+  var badge     = document.getElementById('match-badge');
+  var mbox      = document.getElementById('mismatch-box');
+  var matchRow  = document.getElementById('o-match-row');
+
+  // Fee changes section
+  if(data.fee_changes && data.fee_changes.length){
+    var fcHtml = data.fee_changes.map(function(fc){
+      return '<tr><td style="font-size:11px;white-space:nowrap;">'+fc.changed_at+'</td>'+
+             '<td style="font-size:11px;font-weight:600;">'+fc.student_name+' ('+fc.reference_no+')</td>'+
+             '<td style="font-size:11px;">'+fc.field_changed.replace(/_/g,' ')+'</td>'+
+             '<td style="font-size:11px;text-align:right;">'+fc.old_value+'</td>'+
+             '<td style="font-size:11px;text-align:right;font-weight:600;">'+fc.new_value+'</td>'+
+             '<td style="font-size:11px;color:var(--muted);">'+fc.changed_by+'</td></tr>';
+    }).join('');
+    var fcDiv = document.getElementById('fee-changes-section');
+    if(fcDiv){ fcDiv.style.display='block'; document.getElementById('fee-changes-tbody').innerHTML=fcHtml; }
+  }
+
+  if(data.mismatch){
+    badge.innerHTML = '<span style="background:#e74c3c;color:#fff;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">⚠ MISMATCH</span>';
+    matchRow.className = 'rpt-outstanding';
+    mbox.style.display = 'block';
+
+    var diff    = Math.abs(data.mismatch_diff||0);
+    var reasons = data.mismatch_reasons||[];
+    var feeEdits = reasons.filter(function(r){return r.type==='fee_edit';});
+    var cancels  = reasons.filter(function(r){return r.type==='cancellation';});
+
+    var prose = '<b>Method A (Step 2) is accurate</b> — it recalculates fresh from the current fee structure. ' +
+      'Method B (Step 3) carries forward yesterday\'s balance, so it differs when fees or receipts are changed on the same day. ' +
+      'Current difference: <b>' + formatRs(diff) + '</b>.<br>';
+
+    if(feeEdits.length){
+      prose += '<br><b>Fee edits today (' + feeEdits.length + '):</b><br>';
+      feeEdits.forEach(function(r){
+        prose += '&nbsp;&nbsp;• <b>'+r.student+'</b> — '+r.field+' changed ₹'+r.old_val+' → ₹'+r.new_val;
+        if(r.time) prose += ' ('+r.time+', by <i>'+r.by+'</i>)';
+        prose += '<br>';
+      });
+    }
+    if(cancels.length){
+      prose += '<br><b>Cancellations today (' + cancels.length + '):</b><br>';
+      cancels.forEach(function(r){
+        prose += '&nbsp;&nbsp;• <b>'+r.student+'</b> — '+r.field+' ('+r.new_val+')<br>';
+      });
+    }
+    if(!feeEdits.length && !cancels.length){
+      prose += '<br>No specific changes found in audit log for today.';
+    }
+
+    document.getElementById('mismatch-prose').innerHTML = prose;
+
+    var logged = reasons.filter(function(r){return r.type!=='unknown';});
+    if(logged.length){
+      document.getElementById('mismatch-detail').style.display = 'block';
+      document.getElementById('mismatch-tbody').innerHTML = logged.map(function(r,i){
+        return '<tr style="background:'+(i%2?'#f5eef8':'#fff')+'">' +
+          '<td style="padding:4px 8px;color:var(--muted)">'+(i+1)+'</td>' +
+          '<td style="padding:4px 8px;font-weight:600">'+r.student+'</td>' +
+          '<td style="padding:4px 8px">'+r.field+'</td>' +
+          '<td style="padding:4px 8px;text-align:right;color:#e74c3c">'+r.old_val+'</td>' +
+          '<td style="padding:4px 8px;text-align:right;color:#27ae60;font-weight:700">'+r.new_val+'</td>' +
+          '<td style="padding:4px 8px;font-size:10px;color:var(--muted)">'+(r.time||'—')+'</td>' +
+          '</tr>';
+      }).join('');
+    } else {
+      document.getElementById('mismatch-detail').style.display = 'none';
+    }
+  } else {
+    badge.innerHTML = '<span style="background:#27ae60;color:#fff;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">✓ MATCH</span>';
+    matchRow.className = 'rpt-match';
+    mbox.style.display = 'none';
+  }
+
+  status.textContent = 'Generated at ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  status.style.color = '#27ae60';
+}
+
+function set(id, val){
+  var el = document.getElementById(id);
+  if(el) el.innerHTML = val;
+}
+
+async function loadReportLog(){
+  const data = await apiGet('/api/daily-report/log');
+  const tbody = document.getElementById('report-log-tbody');
+  if(!data.length){
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">No reports generated yet</td></tr>';
+  } else {
+    tbody.innerHTML = data.map(function(r,i){
+      var summary = '';
+      try{ var j=JSON.parse(r.report_json); summary='Collected: ₹'+(j.total_today||0).toLocaleString('en-IN'); }catch(e){}
+      return '<tr><td style="color:var(--muted);">'+(i+1)+'</td>'+
+             '<td style="font-weight:600;">'+isoToDisplay(r.report_date)+'</td>'+
+             '<td>'+r.generated_by+'</td>'+
+             '<td style="font-size:11px;color:var(--muted);">'+r.generated_at+' &nbsp;'+summary+'</td></tr>';
+    }).join('');
+  }
+  document.getElementById('report-log-modal').classList.add('show');
+}
+</script>
+{% endblock %}

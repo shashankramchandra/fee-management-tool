@@ -1,0 +1,88 @@
+╔══════════════════════════════════════════════════════════════╗
+║         SCHOOL FEE SYSTEM — ADMIN DESKTOP SETUP             ║
+║         Do this ONCE. Then it works forever.                 ║
+╚══════════════════════════════════════════════════════════════╝
+
+STEP 1 — Install Python (one time only)
+────────────────────────────────────────
+1. Open Chrome → go to: https://www.python.org/downloads/
+2. Click the big yellow "Download Python" button
+3. Run the downloaded file
+4. ⚠ VERY IMPORTANT: On the first screen, at the BOTTOM,
+   tick the checkbox "Add Python to PATH"
+   (if you miss this nothing will work)
+5. Click "Install Now"
+6. Wait for it to finish, then close it
+
+STEP 2 — Extract the zip file
+───────────────────────────────
+Unzip SchoolFeeSystem.zip to anywhere, e.g.:
+   C:\SchoolFeeSystem\
+
+STEP 3 — Run setup (one time only)
+────────────────────────────────────
+Double-click: INSTALL_AUTOSTART.bat
+
+What it does automatically:
+  ✓ Installs all required packages
+  ✓ Registers the app to start on every Windows login
+  ✓ Creates "School Fee System" shortcut on Desktop
+  ✓ Starts the app right now and opens browser
+
+STEP 4 — That's it!
+─────────────────────
+From now on:
+  • Computer turns ON → server starts silently in background
+  • Admin double-clicks "School Fee System" on Desktop
+  • Browser opens to http://localhost:5000
+  • Login and use
+
+The black command window never appears. Python runs
+completely in the background. Admin sees nothing except
+the browser opening.
+
+═══════════════════════════════════════════════════════════════
+  TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════
+
+"Site can't be reached" after double-clicking shortcut
+  → The background server didn't start yet.
+  → Double-click START.bat once.
+  → Then run INSTALL_AUTOSTART.bat again.
+
+"Python not found"
+  → Python isn't installed or PATH wasn't ticked.
+  → Reinstall Python, make sure to tick "Add to PATH"
+
+Shortcut not working after copy to new computer
+  → Run INSTALL_AUTOSTART.bat on the NEW computer too.
+  → Each computer needs its own setup.
+
+═══════════════════════════════════════════════════════════════
+  ACCESS FROM OTHER SCHOOL COMPUTERS (same WiFi)
+═══════════════════════════════════════════════════════════════
+
+While the app is running on the admin computer:
+
+1. Open Command Prompt on admin computer
+   (Win+R → type cmd → Enter)
+2. Type: ipconfig
+3. Find "IPv4 Address" e.g. 192.168.1.25
+
+4. On any other computer (accounts, reception, principal):
+   Open Chrome → type: http://192.168.1.25:5000
+
+All computers share the SAME database in real time.
+No installation needed on the other computers.
+
+═══════════════════════════════════════════════════════════════
+  DEFAULT LOGINS — CHANGE AFTER FIRST USE
+═══════════════════════════════════════════════════════════════
+
+  management  /  Mgmt@2026    (full access + user management)
+  admin1      /  Admin1@2026  (daily operations)
+  admin2      /  Admin2@2026  (daily operations)
+
+To change: Login → Management tab → Change Password
+
+═══════════════════════════════════════════════════════════════

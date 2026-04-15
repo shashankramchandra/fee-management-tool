@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login - School Fee System</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#1a5276 0%,#2980b9 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-box{background:#fff;border-radius:16px;padding:40px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.logo{text-align:center;margin-bottom:28px;}
+.logo img{max-width:220px;max-height:70px;object-fit:contain;}
+.logo h2{font-size:20px;color:#1a5276;margin-top:10px;font-weight:700;}
+.logo p{font-size:12px;color:#7f8c8d;margin-top:4px;}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#7f8c8d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+.form-control{width:100%;padding:10px 14px;border:1.5px solid #dce3ea;border-radius:8px;font-size:14px;font-family:inherit;transition:border-color .2s;}
+.form-control:focus{outline:none;border-color:#2980b9;box-shadow:0 0 0 3px rgba(41,128,185,.1);}
+.btn-login{width:100%;padding:12px;background:#1a5276;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;font-family:inherit;}
+.btn-login:hover{background:#2980b9;}
+.alert{padding:10px 14px;border-radius:7px;margin-bottom:14px;font-size:13px;display:none;}
+.alert-danger{background:#fdedec;border:1px solid #f5b7b1;color:#922b21;display:block;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="logo">
+    <img src="/static/img/school_logo.png" alt="School Logo" onerror="this.style.display='none'">
+    <h2>Fee Management System</h2>
+    <p>Please log in to continue</p>
+  </div>
+  <div id="alert-box"></div>
+  <div class="form-group">
+    <label>Username</label>
+    <input type="text" class="form-control" id="username" placeholder="Enter username" autocomplete="username"/>
+  </div>
+  <div class="form-group">
+    <label>Password</label>
+    <input type="password" class="form-control" id="password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+  </div>
+  <button class="btn-login" id="login-btn" onclick="doLogin()">
+    <i class="fas fa-sign-in-alt"></i> Login
+  </button>
+</div>
+<script>
+async function doLogin(){
+  const alertBox=document.getElementById('alert-box');
+  alertBox.innerHTML='';
+  const username=document.getElementById('username').value.trim();
+  const password=document.getElementById('password').value;
+  if(!username||!password){alertBox.innerHTML='<div class="alert alert-danger">Please enter username and password</div>';return;}
+  const btn=document.getElementById('login-btn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Logging in...';
+  try{
+    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const data=await res.json();
+    if(data.success){window.location.href='/';}
+    else{alertBox.innerHTML=`<div class="alert alert-danger">${data.error}</div>`;}
+  }catch(e){alertBox.innerHTML='<div class="alert alert-danger">Connection error. Please try again.</div>';}
+  finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-sign-in-alt"></i> Login';}
+}
+</script>
+</body>
+</html>

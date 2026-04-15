@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}MISC Sheet{% endblock %}
+{% block page_title %}<i class="fas fa-table" style="color:#27ae60"></i> MISC Sheet{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+  
+  <!-- MISC Summary -->
+  <div class="card">
+    <div class="card-header" style="background:#1e8449;">
+      <i class="fas fa-chart-bar"></i><h3>MISC Summary (Per Student)</h3>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Ref No.</th>
+              <th>To Pay</th>
+              <th>Paid</th>
+              <th>Balance</th>
+            </tr>
+          </thead>
+          <tbody id="misc-summary-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MISC Transactions -->
+  <div class="card">
+    <div class="card-header" style="background:#2980b9;">
+      <i class="fas fa-list"></i><h3>All MISC Transactions</h3>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Student</th>
+              <th>Ref No.</th>
+              <th>Mode</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody id="misc-txn-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.addEventListener('load', loadMisc);
+
+async function loadMisc() {
+  const [summary, txns] = await Promise.all([
+    apiGet('/api/misc/summary'),
+    apiGet('/api/misc/transactions')
+  ]);
+
+  // Summary
+  const tbody1 = document.getElementById('misc-summary-tbody');
+  if (summary.length) {
+    tbody1.innerHTML = summary.map(r => {
+      const balColor = r.balance > 0 ? '#e74c3c' : r.balance < 0 ? '#27ae60' : 'inherit';
+      return `<tr>
+        <td style="font-weight:600;">${r.student_name}</td>
+        <td style="font-family:monospace;font-size:12px;">${r.reference_no}</td>
+        <td style="text-align:right;">${formatRs(r.misc_to_pay)}</td>
+        <td style="text-align:right;color:#1e8449;font-weight:600;">${formatRs(r.misc_paid)}</td>
+        <td style="text-align:right;font-weight:600;color:${balColor};">${formatRs(Math.abs(r.balance))}${r.balance>0?' Due':r.balance<0?' Over':''}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    tbody1.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">No MISC transactions yet</td></tr>';
+  }
+
+  // Transactions
+  const tbody2 = document.getElementById('misc-txn-tbody');
+  if (txns.length) {
+    tbody2.innerHTML = txns.map(t => `<tr>
+      <td style="font-size:11px;color:var(--muted);">${t.timestamp}</td>
+      <td>${t.student_name}</td>
+      <td style="font-family:monospace;font-size:12px;">${t.reference_no}</td>
+      <td><span class="tag ${t.payment_mode==='CASH'?'tag-cash':'tag-neft'}">${t.payment_mode}</span></td>
+      <td style="font-weight:600;">${formatRs(t.amount)}</td>
+    </tr>`).join('');
+  } else {
+    tbody2.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">No transactions</td></tr>';
+  }
+}
+</script>
+{% endblock %}

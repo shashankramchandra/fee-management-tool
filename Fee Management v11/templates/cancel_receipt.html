@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Cancel Receipt{% endblock %}
+{% block page_title %}<i class="fas fa-ban" style="color:#e74c3c"></i> Cancel Receipt{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+<div>
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-header" style="background:#c0392b;"><i class="fas fa-search"></i><h3>Find Receipt to Cancel</h3></div>
+  <div class="card-body">
+    <div class="alert alert-warning"><i class="fas fa-lock"></i><div><b>Password protected.</b> Cancellation requires your login password. Every cancellation is logged with reason and admin name.</div></div>
+    <div id="alert-box"></div>
+    <div class="form-group">
+      <label>Search Receipt</label>
+      <input type="text" class="form-control" id="search-input" placeholder="Type receipt number or student name..." oninput="searchReceipts()"/>
+    </div>
+    <div id="results-list"></div>
+  </div>
+</div>
+</div>
+<div>
+<!-- Selected Receipt Panel -->
+<div id="selected-panel" style="display:none;" class="card" style="margin-bottom:16px;">
+  <div class="card-header" style="background:#c0392b;"><i class="fas fa-file-invoice"></i><h3>Selected Receipt</h3></div>
+  <div class="card-body">
+    <table style="width:100%;font-size:13px;">
+      <tr><td style="padding:5px 0;color:var(--muted);width:40%;">Receipt No</td><td id="sel-no" style="font-family:monospace;font-weight:600;word-break:break-all;"></td></tr>
+      <tr><td style="padding:5px 0;color:var(--muted);">Student</td><td id="sel-student" style="font-weight:600;"></td></tr>
+      <tr><td style="padding:5px 0;color:var(--muted);">Amount</td><td id="sel-amount" style="font-weight:600;color:#e74c3c;font-size:16px;"></td></tr>
+      <tr><td style="padding:5px 0;color:var(--muted);">Fee Type</td><td id="sel-fee"></td></tr>
+      <tr><td style="padding:5px 0;color:var(--muted);">Payment Mode</td><td id="sel-mode"></td></tr>
+      <tr><td style="padding:5px 0;color:var(--muted);">Date</td><td id="sel-date"></td></tr>
+    </table>
+    <hr class="section-divider">
+    <div class="form-group"><label>Reason for Cancellation <span class="req">*</span></label><textarea class="form-control" id="cancel-reason" rows="3" placeholder="Enter reason why this receipt is being cancelled..."></textarea></div>
+    <div class="form-group"><label>Your Password <span class="req">*</span></label><input type="password" class="form-control" id="cancel-password" placeholder="Enter your login password"/></div>
+    <button class="btn btn-danger btn-lg" id="cancel-btn" onclick="doCancel()"><i class="fas fa-ban"></i> Cancel This Receipt</button>
+  </div>
+</div>
+
+<!-- Cancelled Receipts Log -->
+<div class="card">
+  <div class="card-header" style="background:#922b21;"><i class="fas fa-history"></i><h3>Cancellation Log</h3></div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrapper">
+      <table><thead><tr><th>Receipt No</th><th>Student</th><th>Amount</th><th>Reason</th><th>By</th><th>Date</th><th>PDF</th></tr></thead>
+      <tbody id="cancelled-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h3 style="color:#e74c3c;"><i class="fas fa-exclamation-triangle"></i> Confirm Cancellation</h3>
+    <p>This will <b>permanently cancel</b> receipt <span id="modal-receipt-no" style="font-family:monospace;font-weight:600;"></span> and reverse <span id="modal-amount" style="font-weight:600;color:#e74c3c;"></span> from the student's balance.</p>
+    <p style="margin-top:8px;">This action is logged and cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">No, Go Back</button>
+      <button class="btn btn-danger" id="confirm-btn" onclick="confirmCancel()"><i class="fas fa-ban"></i> Yes, Cancel Receipt</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let selectedReceipt=null;
+let searchTimer=null;
+
+function searchReceipts(){
+  clearTimeout(searchTimer);
+  const q=document.getElementById('search-input').value.trim();
+  if(q.length<2){document.getElementById('results-list').innerHTML='';return;}
+  searchTimer=setTimeout(async()=>{
+    const results=await apiGet(`/api/receipt/search?q=${encodeURIComponent(q)}`);
+    const list=document.getElementById('results-list');
+    if(!results.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">No active receipts found</div>';return;}
+    list.innerHTML=results.map(r=>`
+      <div onclick="selectReceipt(${JSON.stringify(r).replace(/"/g,'&quot;')})"
+           style="padding:10px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .15s;"
+           onmouseover="this.style.background='#fdecea'" onmouseout="this.style.background='#fff'">
+        <div style="font-family:monospace;font-size:12px;font-weight:600;color:var(--primary);">${r.receipt_no}</div>
+        <div style="font-size:13px;font-weight:600;margin-top:3px;">${r.student_name}</div>
+        <div style="font-size:12px;color:var(--muted);">${formatRs(r.amount)} · ${r.fee_type} · ${r.payment_mode} · ${isoToDisplay(r.payment_date)||isoToDisplay((r.created_at||'').substring(0,10))}</div>
+      </div>`).join('');
+  },300);
+}
+
+function selectReceipt(r){
+  selectedReceipt=r;
+  document.getElementById('sel-no').textContent=r.receipt_no;
+  document.getElementById('sel-student').textContent=r.student_name;
+  document.getElementById('sel-amount').textContent=formatRs(r.amount);
+  document.getElementById('sel-fee').innerHTML=`<span class="tag ${r.fee_type==='TUITION'?'tag-tuition':'tag-misc'}">${r.fee_type}</span>`;
+  document.getElementById('sel-mode').innerHTML=`<span class="tag ${r.payment_mode==='CASH'?'tag-cash':'tag-neft'}">${r.payment_mode}</span>`;
+  document.getElementById('sel-date').textContent=isoToDisplay(r.payment_date)||isoToDisplay((r.created_at||'').substring(0,10));
+  document.getElementById('selected-panel').style.display='block';
+  document.getElementById('cancel-reason').value='';
+  document.getElementById('cancel-password').value='';
+  document.getElementById('alert-box').innerHTML='';
+}
+
+function doCancel(){
+  if(!selectedReceipt) return;
+  const reason=document.getElementById('cancel-reason').value.trim();
+  const pw=document.getElementById('cancel-password').value;
+  if(!reason) return showAlert(document.getElementById('alert-box'),'danger','Please enter a reason for cancellation.');
+  if(!pw)     return showAlert(document.getElementById('alert-box'),'danger','Please enter your password.');
+  document.getElementById('modal-receipt-no').textContent=selectedReceipt.receipt_no;
+  document.getElementById('modal-amount').textContent=formatRs(selectedReceipt.amount);
+  document.getElementById('confirm-modal').classList.add('show');
+}
+
+function closeModal(){document.getElementById('confirm-modal').classList.remove('show');}
+
+async function confirmCancel(){
+  const btn=document.getElementById('confirm-btn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Cancelling...';
+  closeModal();
+  const result=await apiPost('/api/receipt/cancel',{
+    receipt_no:selectedReceipt.receipt_no,
+    reason:document.getElementById('cancel-reason').value.trim(),
+    password:document.getElementById('cancel-password').value
+  });
+  if(result.success){
+    showAlert(document.getElementById('alert-box'),'success',`✅ Receipt <b>${selectedReceipt.receipt_no}</b> cancelled. Amount reversed from student balance.`);
+    selectedReceipt=null;
+    document.getElementById('selected-panel').style.display='none';
+    document.getElementById('search-input').value='';
+    document.getElementById('results-list').innerHTML='';
+    loadCancelledLog();
+  }else{showAlert(document.getElementById('alert-box'),'danger','❌ '+result.error);}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-ban"></i> Yes, Cancel Receipt';
+}
+
+async function loadCancelledLog(){
+  const rows=await apiGet('/api/receipt/cancelled');
+  const tbody=document.getElementById('cancelled-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">No cancellations yet</td></tr>';return;}
+  tbody.innerHTML=rows.map(r=>`<tr>
+    <td style="font-family:monospace;font-size:11px;">${r.original_receipt_no}</td>
+    <td>${r.student_name}</td><td style="color:#e74c3c;font-weight:600;">${formatRs(r.amount)}</td>
+    <td style="font-size:11px;max-width:150px;">${r.reason}</td>
+    <td style="font-size:11px;">${r.cancelled_by}</td>
+    <td style="font-size:11px;color:var(--muted);">${r.cancelled_at}</td>
+    <td>${r.cancellation_pdf?`<a href="/api/receipt/download/CANCELLED_${r.original_receipt_no}" class="btn btn-sm btn-secondary"><i class="fas fa-download"></i></a>`:'—'}</td>
+  </tr>`).join('');
+}
+window.addEventListener('load',loadCancelledLog);
+</script>
+{% endblock %}

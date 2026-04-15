@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}<i class="fas fa-tachometer-alt" style="color:#f39c12"></i> Dashboard{% endblock %}
+{% block content %}
+<div class="stats-grid" id="stats-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-users"></i></div><div class="stat-info"><h4 id="s-total">—</h4><p>Total in Database</p></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i class="fas fa-user-check"></i></div><div class="stat-info"><h4 id="s-admitted">—</h4><p>Admitted (RA + NA)</p></div></div>
+  <div class="stat-card"><div class="stat-icon teal"><i class="fas fa-redo"></i></div><div class="stat-info"><h4 id="s-ra">—</h4><p>Re-Admissions (RA)</p></div></div>
+  <div class="stat-card"><div class="stat-icon orange2"><i class="fas fa-user-plus"></i></div><div class="stat-info"><h4 id="s-na">—</h4><p>New Admissions (NA)</p></div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i class="fas fa-user-clock"></i></div><div class="stat-info"><h4 id="s-noref">—</h4><p>No Ref (Waiting)</p></div></div>
+  <div class="stat-card"><div class="stat-icon teal"><i class="fas fa-receipt"></i></div><div class="stat-info"><h4 id="s-today">—</h4><p>Receipts Today</p></div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-rupee-sign"></i></div><div class="stat-info"><h4 id="s-collected">—</h4><p>Collected Today</p></div></div>
+  <div class="stat-card"><div class="stat-icon red"><i class="fas fa-file-invoice-dollar"></i></div><div class="stat-info"><h4 id="s-total-amt">—</h4><p>Total Collected</p></div></div>
+  <div class="stat-card"><div class="stat-icon darkred"><i class="fas fa-exclamation-triangle"></i></div><div class="stat-info"><h4 id="s-outstanding">—</h4><p>Total Outstanding</p></div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
+  <div class="card">
+    <div class="card-header"><i class="fas fa-chart-pie"></i><h3>Fee Type Breakdown</h3></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
+        <div style="background:#eaf4fb;border-radius:8px;padding:14px;"><div id="d-tuition-amt" style="font-size:20px;font-weight:700;color:var(--primary)">—</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Tuition Collected</div><div class="tag tag-tuition" style="margin-top:5px;" id="d-tuition-count">—</div></div>
+        <div style="background:#eafaf1;border-radius:8px;padding:14px;"><div id="d-misc-amt" style="font-size:20px;font-weight:700;color:#1e8449">—</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">MISC Collected</div><div class="tag tag-misc" style="margin-top:5px;" id="d-misc-count">—</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><i class="fas fa-money-bill-wave"></i><h3>Payment Mode</h3></div>
+    <div class="card-body" id="d-payment-breakdown"><div style="color:var(--muted);font-size:13px;">Loading...</div></div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><i class="fas fa-history"></i><h3>Recent Receipts</h3><a href="/all-receipts" style="margin-left:auto;color:rgba(255,255,255,.8);font-size:12px;">View All →</a></div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrapper">
+      <table><thead><tr><th>#</th><th>Receipt No.</th><th>Student</th><th>Amount</th><th>Fee Type</th><th>Mode</th><th>Date</th><th>By</th><th>PDF</th></tr></thead>
+      <tbody id="d-recent-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+window.addEventListener('load', loadDashboard);
+async function loadDashboard(){
+  const s = await apiGet('/api/dashboard/stats');
+  document.getElementById('s-total').textContent    = fmtNum(s.total_students);
+  document.getElementById('s-admitted').textContent = fmtNum(s.admitted);
+  document.getElementById('s-ra').textContent        = fmtNum(s.ra_count||0);
+  document.getElementById('s-na').textContent        = fmtNum(s.na_count||0);
+  document.getElementById('s-outstanding').textContent = formatRs(s.total_outstanding||0);
+  document.getElementById('s-noref').textContent    = fmtNum(s.no_ref);
+  document.getElementById('s-today').textContent    = fmtNum(s.receipts_today);
+  document.getElementById('s-collected').textContent= formatRs(s.collected_today);
+  document.getElementById('s-total-amt').textContent= formatRs((s.tuition_total||0)+(s.misc_total||0));
+  document.getElementById('d-tuition-amt').textContent = formatRs(s.tuition_total);
+  document.getElementById('d-misc-amt').textContent    = formatRs(s.misc_total);
+  document.getElementById('d-tuition-count').textContent = (s.tuition_receipt_count||0)+' receipts';
+  document.getElementById('d-misc-count').textContent    = (s.misc_receipt_count||0)+' receipts';
+  const pb=document.getElementById('d-payment-breakdown');
+  pb.innerHTML=s.payment_breakdown.length?s.payment_breakdown.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">
+      <span class="tag ${p.payment_mode==='CASH'?'tag-cash':'tag-neft'}">${p.payment_mode}</span>
+      <span style="font-size:12px;color:var(--muted)">${p.count} receipts</span>
+      <span style="font-weight:600;">${formatRs(p.total)}</span>
+    </div>`).join(''):'<div style="color:var(--muted);font-size:13px;">No data yet</div>';
+  const tbody=document.getElementById('d-recent-tbody');
+  tbody.innerHTML=s.recent_receipts.length?s.recent_receipts.map((r,i)=>`<tr>
+    <td style="color:var(--muted)">${i+1}</td>
+    <td style="font-family:monospace;font-size:11px;"><span class="tag ${r.fee_type==='TUITION'?'tag-tuition':'tag-misc'}">${r.receipt_no}</span></td>
+    <td style="font-weight:600;font-size:12px;">${r.student_name}</td>
+    <td style="font-weight:600;">${formatRs(r.amount)}</td>
+    <td><span class="tag ${r.fee_type==='TUITION'?'tag-tuition':'tag-misc'}">${r.fee_type}</span></td>
+    <td><span class="tag ${r.payment_mode==='CASH'?'tag-cash':'tag-neft'}">${r.payment_mode}</span></td>
+    <td style="font-size:11px;">${r.payment_date||''}</td>
+    <td style="font-size:11px;color:var(--muted);">${r.created_by||''}</td>
+    <td>${r.pdf_path?`<a href="/api/receipt/download/${encodeURIComponent(r.receipt_no)}" class="btn btn-sm btn-primary"><i class="fas fa-download"></i></a>`:'<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
+  </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No receipts yet</td></tr>';
+}
+</script>
+{% endblock %}

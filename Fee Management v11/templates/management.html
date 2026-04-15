@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}Management{% endblock %}
+{% block page_title %}<i class="fas fa-shield-alt" style="color:#f39c12"></i> Management Panel{% endblock %}
+{% block content %}
+
+<!-- ── Row 1: User Management (full width) ── -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header" style="background:#6c3483;">
+    <i class="fas fa-users-cog"></i><h3>User Management — Login IDs &amp; Passwords</h3>
+  </div>
+  <div class="card-body">
+    <div id="users-alert"></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+      Use the <span style="background:#f39c12;color:#fff;padding:2px 7px;border-radius:4px;font-size:11px;"><i class="fas fa-key"></i> KEY</span> button to change a user's password.
+      Use the <span style="background:#2980b9;color:#fff;padding:2px 7px;border-radius:4px;font-size:11px;"><i class="fas fa-edit"></i> EDIT</span> button to change their login ID or display name.
+    </p>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;font-size:13px;margin-bottom:16px;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Login ID</th>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Display Name</th>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Role</th>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Status</th>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Last Login</th>
+            <th style="background:#6c3483;color:#fff;padding:10px 12px;text-align:left;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+    <hr style="margin:16px 0;border-color:var(--border);">
+    <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:12px;">
+      <i class="fas fa-user-plus"></i> Create New User
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Login ID (Username)</label>
+        <input class="form-control" id="new-username" placeholder="e.g. admin3"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Display Name</label>
+        <input class="form-control" id="new-display" placeholder="e.g. Admin Three"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Password</label>
+        <input type="password" class="form-control" id="new-password" placeholder="Min 4 characters"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Role</label>
+        <select class="form-control" id="new-role">
+          <option value="admin">Admin</option>
+          <option value="management">Management</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="createUser()" style="height:38px;">
+        <i class="fas fa-user-plus"></i> Create
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Row 2: Activity Log (full width) ── -->
+<div class="card">
+  <div class="card-header" style="background:#1a5276;">
+    <i class="fas fa-history"></i><h3>Activity Log — All Admin Actions</h3>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div style="padding:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" class="form-control" id="filter-user"
+             placeholder="Filter by username..." oninput="loadAudit()" style="width:220px;"/>
+      <select class="form-control" id="filter-action" onchange="loadAudit()" style="width:200px;">
+        <option value="">All Actions</option>
+        <option value="LOGIN">Login / Logout</option>
+        <option value="GENERATE_RECEIPT">Receipt Generated</option>
+        <option value="CANCEL">Receipt Cancelled</option>
+        <option value="EDIT_STUDENT">Student Edited</option>
+        <option value="UPDATE_TUITION">Tuition Fees Updated</option>
+        <option value="ADD_STUDENT">New Admission (NA)</option>
+        <option value="ASSIGN_REF">Re-Admission (RA)</option>
+        <option value="DELETE_STUDENT">Student Deleted / TC</option>
+        <option value="CHANGE_PASSWORD">Password Changed</option>
+        <option value="RENAME_USER">User Renamed</option>
+        <option value="CREATE_USER">User Created</option>
+      </select>
+      <span id="audit-count" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div class="table-wrapper" style="max-height:500px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Details</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Change Password Modal ── -->
+<div class="modal-overlay" id="pw-modal">
+  <div class="modal">
+    <h3><i class="fas fa-key" style="color:#f39c12;"></i> Change Password</h3>
+    <p>Changing password for: <b id="pw-modal-user" style="color:#6c3483;"></b></p>
+    <div class="form-group">
+      <label>New Password</label>
+      <input type="password" class="form-control" id="new-pw-value" placeholder="Enter new password (min 4 chars)"/>
+    </div>
+    <div class="form-group">
+      <label>Confirm Password</label>
+      <input type="password" class="form-control" id="confirm-pw-value" placeholder="Re-enter new password"/>
+    </div>
+    <div id="pw-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closePwModal()">Cancel</button>
+      <button class="btn btn-warning" onclick="doChangePw()">
+        <i class="fas fa-key"></i> Change Password
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Rename User Modal ── -->
+<div class="modal-overlay" id="rename-modal">
+  <div class="modal">
+    <h3><i class="fas fa-edit" style="color:#2980b9;"></i> Change Login ID / Display Name</h3>
+    <p>Editing user: <b id="rename-modal-user" style="color:#6c3483;"></b></p>
+    <div class="form-group">
+      <label>New Login ID <span style="font-size:11px;color:var(--muted);">(what they type to log in)</span></label>
+      <input class="form-control" id="rename-new-username" placeholder="New login ID"/>
+    </div>
+    <div class="form-group">
+      <label>Display Name <span style="font-size:11px;color:var(--muted);">(shown in sidebar after login)</span></label>
+      <input class="form-control" id="rename-display-name" placeholder="Full name"/>
+    </div>
+    <div id="rename-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('rename-modal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-primary" onclick="doRenameUser()">
+        <i class="fas fa-save"></i> Save Changes
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+let pwUsername = '';
+let renameOldUsername = '';
+
+window.addEventListener('load', () => { loadUsers(); loadAudit(); });
+
+// ── Users ──────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const users = await apiGet('/api/management/users');
+  const tbody = document.getElementById('users-tbody');
+  tbody.innerHTML = users.map((u,i) => `
+    <tr style="${i%2?'background:#faf9ff':''}">
+      <td style="padding:9px 12px;font-weight:700;font-family:monospace;font-size:13px;">${u.username}</td>
+      <td style="padding:9px 12px;">${u.display_name||'—'}</td>
+      <td style="padding:9px 12px;">
+        <span class="tag ${u.role==='management'?'tag-misc':'tag-na'}">${u.role}</span>
+      </td>
+      <td style="padding:9px 12px;">
+        <span style="color:${u.is_active?'#1e8449':'#e74c3c'};font-weight:600;font-size:12px;">
+          ${u.is_active?'● Active':'○ Disabled'}
+        </span>
+      </td>
+      <td style="padding:9px 12px;font-size:11px;color:var(--muted);">${u.last_login||'Never'}</td>
+      <td style="padding:9px 12px;">
+        <div style="display:flex;gap:5px;align-items:center;">
+          <button class="btn btn-sm btn-warning" onclick="openPwModal('${u.username}')"
+                  title="Change Password for ${u.username}">
+            <i class="fas fa-key"></i> Password
+          </button>
+          <button class="btn btn-sm" style="background:#2980b9;color:#fff;"
+                  onclick="openRenameModal('${u.username}','${u.display_name||u.username}')"
+                  title="Change Login ID or Display Name">
+            <i class="fas fa-edit"></i> Login ID
+          </button>
+          <button class="btn btn-sm ${u.is_active?'btn-danger':'btn-success'}"
+                  onclick="toggleUser('${u.username}',${u.is_active?0:1})"
+                  title="${u.is_active?'Disable':'Enable'} this user">
+            ${u.is_active?'<i class="fas fa-ban"></i> Disable':'<i class="fas fa-check"></i> Enable'}
+          </button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+async function createUser() {
+  const un   = document.getElementById('new-username').value.trim();
+  const disp = document.getElementById('new-display').value.trim();
+  const pw   = document.getElementById('new-password').value;
+  const role = document.getElementById('new-role').value;
+  const alert = document.getElementById('users-alert');
+  if (!un)          return showAlert(alert,'danger','Login ID is required.');
+  if (!disp)        return showAlert(alert,'danger','Display Name is required.');
+  if (!pw || pw.length < 4) return showAlert(alert,'danger','Password must be at least 4 characters.');
+  const result = await apiPost('/api/management/create-user',
+    {username:un, password:pw, role:role, display_name:disp});
+  if (result.success) {
+    ['new-username','new-password','new-display'].forEach(id=>document.getElementById(id).value='');
+    loadUsers();
+    showAlert(alert,'success',`✅ User "${un}" created successfully.`);
+  } else {
+    showAlert(alert,'danger',result.error||'Failed to create user.');
+  }
+}
+
+// ── Password Modal ─────────────────────────────────────────────────────
+function openPwModal(u) {
+  pwUsername = u;
+  document.getElementById('pw-modal-user').textContent = u;
+  document.getElementById('new-pw-value').value = '';
+  document.getElementById('confirm-pw-value').value = '';
+  document.getElementById('pw-alert').innerHTML = '';
+  document.getElementById('pw-modal').classList.add('show');
+}
+function closePwModal() {
+  document.getElementById('pw-modal').classList.remove('show');
+}
+async function doChangePw() {
+  const pw1 = document.getElementById('new-pw-value').value;
+  const pw2 = document.getElementById('confirm-pw-value').value;
+  const al  = document.getElementById('pw-alert');
+  if (!pw1 || pw1.length < 4) return showAlert(al,'danger','Password must be at least 4 characters.');
+  if (pw1 !== pw2)             return showAlert(al,'danger','Passwords do not match.');
+  const res = await apiPost('/api/management/change-password',
+    {username: pwUsername, new_password: pw1});
+  if (res.success) {
+    closePwModal();
+    showAlert(document.getElementById('users-alert'),'success',
+      `✅ Password changed for "${pwUsername}".`);
+  } else {
+    showAlert(al,'danger', res.error||'Failed to change password.');
+  }
+}
+
+// ── Rename Modal ───────────────────────────────────────────────────────
+function openRenameModal(u, display) {
+  renameOldUsername = u;
+  document.getElementById('rename-modal-user').textContent = u;
+  document.getElementById('rename-new-username').value = u;
+  document.getElementById('rename-display-name').value = display;
+  document.getElementById('rename-alert').innerHTML = '';
+  document.getElementById('rename-modal').classList.add('show');
+}
+async function doRenameUser() {
+  const newU  = document.getElementById('rename-new-username').value.trim();
+  const dispN = document.getElementById('rename-display-name').value.trim();
+  const al    = document.getElementById('rename-alert');
+  if (!newU)  return showAlert(al,'danger','Login ID cannot be empty.');
+  if (!dispN) return showAlert(al,'danger','Display Name cannot be empty.');
+  const res = await apiPost('/api/management/rename-user',
+    {old_username: renameOldUsername, new_username: newU, display_name: dispN});
+  if (res.success) {
+    document.getElementById('rename-modal').classList.remove('show');
+    loadUsers();
+    showAlert(document.getElementById('users-alert'),'success',
+      `✅ User updated: login ID is now "${newU}".`);
+  } else {
+    showAlert(al,'danger', res.error||'Failed to update user.');
+  }
+}
+
+async function toggleUser(username, active) {
+  const res = await apiPost('/api/management/toggle-user',{username, active:!!active});
+  if (res.success) loadUsers();
+  else showAlert(document.getElementById('users-alert'),'danger', res.error||'Failed.');
+}
+
+// ── Audit Log ──────────────────────────────────────────────────────────
+async function loadAudit() {
+  const u      = document.getElementById('filter-user').value.trim();
+  const action = document.getElementById('filter-action').value;
+  const data   = await apiGet('/api/management/audit-log?username='
+    + encodeURIComponent(u) + '&action=' + encodeURIComponent(action));
+  const tbody  = document.getElementById('audit-tbody');
+  document.getElementById('audit-count').textContent =
+    data.total ? data.total + ' entries' : '';
+  if (!data.logs || !data.logs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">No activity found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.logs.map((l,i) => `
+    <tr style="${i%2?'background:#f7fbff':''}">
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;">${l.timestamp}</td>
+      <td style="font-weight:600;font-size:12px;">
+        ${l.username}
+        <span class="tag ${l.role==='management'?'tag-misc':'tag-na'}"
+              style="font-size:9px;">${l.role}</span>
+      </td>
+      <td style="font-size:11px;font-family:monospace;color:#1a5276;font-weight:600;">${l.action}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:280px;word-break:break-word;">${l.details||''}</td>
+      <td style="font-size:11px;color:var(--muted);">${l.ip_address||''}</td>
+    </tr>`).join('');
+}
+</script>
+{% endblock %}

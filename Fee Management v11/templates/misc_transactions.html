@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}MISC Transactions{% endblock %}
+{% block page_title %}<i class="fas fa-list-alt" style="color:#27ae60"></i> MISC Transactions{% endblock %}
+{% block content %}
+
+<!-- ── Filters ── -->
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+
+  <input type="text" id="search-misc" placeholder="🔍 Receipt no or student..."
+         class="form-control" style="width:230px;" oninput="filterMisc()"/>
+
+  <select id="filter-ref" class="form-control" style="width:130px;" onchange="filterMisc()">
+    <option value="">All Students</option>
+    <option value="RA">RA Only</option>
+    <option value="NA">NA Only</option>
+  </select>
+
+  <select id="filter-mode" class="form-control" style="width:120px;" onchange="filterMisc()">
+    <option value="">All Modes</option>
+    <option value="CASH">Cash</option>
+    <option value="NEFT">NEFT</option>
+  </select>
+
+  <div style="display:flex;align-items:center;gap:4px;">
+    <label style="font-size:11px;color:var(--muted);white-space:nowrap;">From</label>
+    <input type="date" id="filter-from" class="form-control" style="width:140px;" onchange="filterMisc()"/>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:4px;">
+    <label style="font-size:11px;color:var(--muted);white-space:nowrap;">To</label>
+    <input type="date" id="filter-to" class="form-control" style="width:140px;" onchange="filterMisc()"/>
+  </div>
+
+  <button class="btn btn-sm" style="background:#ecf0f1;color:var(--primary);border:1px solid var(--border);"
+          onclick="clearFilters()">✕ Clear</button>
+
+  <span id="misc-count" style="font-size:12px;color:var(--muted);"></span>
+</div>
+
+<div class="card">
+  <div class="card-header" style="background:#1e8449;">
+    <i class="fas fa-list"></i><h3>All MISC Transactions</h3>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrapper" style="max-height:70vh;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Date</th><th>Receipt No.</th><th>Student Name</th>
+            <th>Class</th><th>Ref No.</th><th>Mode</th><th>Amount</th><th>PDF</th>
+          </tr>
+        </thead>
+        <tbody id="misc-tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="7" style="text-align:right;font-weight:700;">TOTAL</td>
+            <td id="misc-total" style="font-weight:700;"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let allMisc = [];
+
+window.addEventListener('load', async () => {
+  allMisc = await apiGet('/api/misc/transactions');
+  filterMisc();
+});
+
+function clearFilters() {
+  document.getElementById('search-misc').value  = '';
+  document.getElementById('filter-ref').value   = '';
+  document.getElementById('filter-mode').value  = '';
+  document.getElementById('filter-from').value  = '';
+  document.getElementById('filter-to').value    = '';
+  filterMisc();
+}
+
+function filterMisc() {
+  const q    = document.getElementById('search-misc').value.toLowerCase().trim();
+  const ref  = document.getElementById('filter-ref').value;
+  const mode = document.getElementById('filter-mode').value;
+  const from = document.getElementById('filter-from').value;  // YYYY-MM-DD
+  const to   = document.getElementById('filter-to').value;
+
+  const filtered = allMisc.filter(t => {
+    const refNo  = (t.reference_no || '').toUpperCase();
+    const rDate  = displayToIso(t.payment_date || '') || (t.timestamp || '').substring(0, 10);
+
+    if (q && !(t.student_name||'').toLowerCase().includes(q) &&
+              !(t.reference_no||'').toLowerCase().includes(q) &&
+              !(t.receipt_no||'').toLowerCase().includes(q)) return false;
+    if (ref  && !refNo.startsWith(ref))                         return false;
+    if (mode && (t.payment_mode||'').toUpperCase() !== mode)    return false;
+    if (from && rDate < from)                                   return false;
+    if (to   && rDate > to)                                     return false;
+    return true;
+  });
+
+  renderMisc(filtered, allMisc.length);
+}
+
+function renderMisc(data, total_count) {
+  const tbody = document.getElementById('misc-tbody');
+  let total = 0;
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No transactions found</td></tr>';
+    document.getElementById('misc-total').textContent = '₹0';
+    document.getElementById('misc-count').textContent = '0 of ' + (total_count||0) + ' transactions';
+    return;
+  }
+  tbody.innerHTML = data.map((t, i) => {
+    total += t.amount || 0;
+    const dateDisplay = isoToDisplay(t.payment_date || '') || isoToDisplay((t.timestamp||'').substring(0,10)) || t.timestamp || '';
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-size:11px;white-space:nowrap;">${dateDisplay}</td>
+      <td style="font-family:monospace;font-size:11px;font-weight:600;">
+        ${t.receipt_no ? `<span class="tag tag-misc">${t.receipt_no}</span>` : '<span style="color:var(--muted)">—</span>'}
+      </td>
+      <td style="font-weight:600;">${t.student_name||'—'}</td>
+      <td>${t.class||'—'}</td>
+      <td style="font-family:monospace;font-size:11px;">${t.reference_no||'—'}</td>
+      <td><span class="tag ${(t.payment_mode||'')==='CASH'?'tag-cash':'tag-neft'}">${t.payment_mode||'—'}</span></td>
+      <td style="font-weight:600;text-align:right;">${formatRs(t.amount)}</td>
+      <td>${t.receipt_no ? `<a href="/api/receipt/download/${encodeURIComponent(t.receipt_no)}" class="btn btn-sm btn-primary"><i class="fas fa-download"></i></a>` : '—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('misc-total').textContent = formatRs(total);
+  document.getElementById('misc-count').textContent = data.length + ' of ' + (total_count||data.length) + ' transactions';
+}
+</script>
+{% endblock %}

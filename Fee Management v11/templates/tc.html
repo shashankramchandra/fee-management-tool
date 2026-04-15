@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}TC / Delete Student{% endblock %}
+{% block page_title %}<i class="fas fa-user-minus" style="color:#e74c3c"></i> Transfer Certificate{% endblock %}
+
+{% block content %}
+<div style="max-width:560px;margin:0 auto;">
+  <div class="card">
+    <div class="card-header" style="background:#c0392b;">
+      <i class="fas fa-exclamation-triangle"></i>
+      <h3>Delete Student Record (TC)</h3>
+    </div>
+    <div class="card-body">
+
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div><b>Warning:</b> Deleting a student record is permanent. A backup log is maintained internally. Use this only when issuing a Transfer Certificate.<br><b>Note:</b> All receipts for this student must be cancelled first from the Cancel Receipt tab before deletion is allowed.</div>
+      </div>
+
+      <div id="alert-box"></div>
+
+      <div class="form-group">
+        <label>Select Student <span class="required">*</span></label>
+        <div class="search-wrapper">
+          <input type="text" class="form-control" id="student_name"
+                 placeholder="Type student name to search..."
+                 autocomplete="off"
+                 oninput="searchForTC()" />
+          <div class="autocomplete-list" id="tc-dropdown" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div id="student-preview" style="display:none;" class="card" style="margin-top:12px;">
+        <div style="background:#fdf2f2;border:1px solid #f5b7b1;border-radius:8px;padding:16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+            <div><b>Name:</b> <span id="prev-name">—</span></div>
+            <div><b>Ref No:</b> <span id="prev-ref" style="font-family:monospace;"></span></div>
+            <div><b>Father:</b> <span id="prev-father">—</span></div>
+            <div><b>Mother:</b> <span id="prev-mother">—</span></div>
+            <div><b>Class:</b> <span id="prev-class">—</span></div>
+            <div><b>Status:</b> <span id="prev-status">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:10px;" id="action-buttons" style="display:none;">
+        <button class="btn btn-danger" id="delete-btn" onclick="confirmDelete()" style="flex:1;display:none;">
+          <i class="fas fa-trash"></i> Delete Student (Issue TC)
+        </button>
+        <button class="btn btn-secondary" onclick="clearForm()" style="flex:1;">
+          <i class="fas fa-times"></i> Clear
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h3><i class="fas fa-exclamation-triangle" style="color:#e74c3c;"></i> Confirm Deletion</h3>
+    <p>Are you sure you want to delete the record for <b id="modal-name"></b>?<br>
+       This action <b>cannot be undone</b>. A TC log will be maintained.</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirm-delete-btn" onclick="doDelete()">
+        <i class="fas fa-trash"></i> Yes, Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedStudent = null;
+let searchTimer = null;
+
+function searchForTC() {
+  clearTimeout(searchTimer);
+  const query = document.getElementById('student_name').value.trim();
+  const dropdown = document.getElementById('tc-dropdown');
+  if (query.length < 1) { dropdown.style.display='none'; return; }
+
+  searchTimer = setTimeout(async () => {
+    const data = await apiGet(`/api/students/search?q=${encodeURIComponent(query)}&field=student`);
+    dropdown.innerHTML = '';
+    if (!data.length) { dropdown.style.display='none'; return; }
+    data.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'autocomplete-item';
+      div.innerHTML = `<b>${s.student_name}</b> <span style="font-size:11px;color:var(--muted);">${s.father_name} / ${s.mother_name} | Ref: ${s.reference_no || '—'}</span>`;
+      div.onclick = () => selectStudent(s);
+      dropdown.appendChild(div);
+    });
+    dropdown.style.display = 'block';
+  }, 200);
+}
+
+function selectStudent(s) {
+  selectedStudent = s;
+  document.getElementById('student_name').value = s.student_name;
+  document.getElementById('tc-dropdown').style.display = 'none';
+
+  document.getElementById('prev-name').textContent   = s.student_name;
+  document.getElementById('prev-ref').textContent    = s.reference_no || '—';
+  document.getElementById('prev-father').textContent = s.father_name;
+  document.getElementById('prev-mother').textContent = s.mother_name;
+  document.getElementById('prev-class').textContent  = s.class || '—';
+  document.getElementById('prev-status').textContent = s.status || '—';
+
+  document.getElementById('student-preview').style.display = 'block';
+  document.getElementById('action-buttons').style.display = 'flex';
+  document.getElementById('delete-btn').style.display = 'block';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrapper'))
+    document.getElementById('tc-dropdown').style.display = 'none';
+});
+
+function confirmDelete() {
+  if (!selectedStudent) return;
+  document.getElementById('modal-name').textContent = selectedStudent.student_name;
+  document.getElementById('confirm-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('confirm-modal').classList.remove('show');
+}
+
+async function doDelete() {
+  if (!selectedStudent) return;
+  const btn = document.getElementById('confirm-delete-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Deleting...';
+
+  closeModal();
+
+  const result = await apiPost('/api/students/delete', {
+    student_name: selectedStudent.student_name,
+    reason: 'TC'
+  });
+
+  if (result.success) {
+    showAlert(document.getElementById('alert-box'), 'success',
+      `✅ Student <b>${selectedStudent.student_name}</b> deleted. TC issued.`);
+    clearForm();
+  } else {
+    const msg = result.error.includes('active receipt') 
+      ? `❌ ${result.error}<br><br><a href="/cancel-receipt" style="color:#1a5276;font-weight:600;"><i class="fas fa-ban"></i> Go to Cancel Receipt tab →</a>`
+      : '❌ ' + result.error;
+    showAlert(document.getElementById('alert-box'), 'danger', msg);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-trash"></i> Yes, Delete';
+}
+
+function clearForm() {
+  selectedStudent = null;
+  document.getElementById('student_name').value = '';
+  document.getElementById('student-preview').style.display = 'none';
+  document.getElementById('delete-btn').style.display = 'none';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,172 @@
+============================================================
+  ROYAL PUBLIC SCHOOL — CLOUD DEPLOYMENT GUIDE
+  Move your Fee App to a VPS so it runs 24/7 from anywhere
+============================================================
+
+WHAT YOU NEED
+─────────────
+• A Hostinger VPS account (₹300–500/month)
+• The school_fee_app_v3.zip file
+• Any SSH client:
+    - Windows: use the free app "PuTTY" (putty.org) or Windows Terminal
+    - Mac/Linux: SSH is built in (open Terminal)
+• 30 minutes total
+
+
+════════════════════════════════════════════════════════════
+STEP 1 — BUY A VPS ON HOSTINGER  (~5 minutes)
+════════════════════════════════════════════════════════════
+
+1. Go to hostinger.com → VPS Hosting
+2. Choose the CHEAPEST plan (KVM 1 — 1 vCPU, 4GB RAM — enough for this app)
+3. During setup:
+   - Operating System → Ubuntu 22.04
+   - Set a ROOT PASSWORD (write this down — you'll need it)
+4. After purchase, go to your Hostinger dashboard → VPS → Overview
+5. Note down your SERVER'S IP ADDRESS (looks like 123.45.67.89)
+
+
+════════════════════════════════════════════════════════════
+STEP 2 — CONNECT TO YOUR SERVER  (~3 minutes)
+════════════════════════════════════════════════════════════
+
+On Windows:
+  1. Open PuTTY
+  2. Host Name: your server IP (e.g. 123.45.67.89)
+  3. Port: 22
+  4. Click Open
+  5. Login as: root
+  6. Password: the root password you set in Step 1
+
+On Mac/Linux:
+  Open Terminal and type:
+    ssh root@123.45.67.89
+  (replace with your actual IP)
+  Enter the root password when asked.
+
+You should see a command prompt like:   root@vps:~#
+That means you're inside your server.
+
+
+════════════════════════════════════════════════════════════
+STEP 3 — UPLOAD YOUR APP FILES  (~5 minutes)
+════════════════════════════════════════════════════════════
+
+You need to upload school_fee_app_v3.zip and deploy.sh to the server.
+
+Option A — Using WinSCP (Windows, easiest):
+  1. Download WinSCP free from winscp.net
+  2. Connect: Protocol=SFTP, Host=your IP, User=root, Password=your password
+  3. On the right panel (server side), navigate to /root/
+  4. Drag school_fee_app_v3.zip from your computer to /root/ on the server
+  5. Also drag deploy.sh to /root/
+
+Option B — Using command line (Mac/Linux):
+  Open a NEW terminal window (keep the SSH one open) and type:
+    scp /path/to/school_fee_app_v3.zip root@123.45.67.89:/root/
+    scp /path/to/deploy.sh root@123.45.67.89:/root/
+  (replace paths and IP with yours)
+
+
+════════════════════════════════════════════════════════════
+STEP 4 — RUN THE DEPLOYMENT SCRIPT  (~5 minutes)
+════════════════════════════════════════════════════════════
+
+Back in your SSH window (where you see root@vps:~#), type:
+
+    chmod +x /root/deploy.sh
+    bash /root/deploy.sh
+
+Watch the output. It will:
+  [1/7] Update the system
+  [2/7] Create app folder
+  [3/7] Extract your app files
+  [4/7] Install Python packages
+  [5/7] Set permissions
+  [6/7] Install the app as a service (auto-starts on reboot)
+  [7/7] Open the firewall
+
+At the end it will print:
+  ✓ Service is RUNNING
+  Access the app at: http://123.45.67.89:5000
+
+
+════════════════════════════════════════════════════════════
+STEP 5 — TEST IT  (~1 minute)
+════════════════════════════════════════════════════════════
+
+On your laptop, open any browser and go to:
+    http://YOUR_SERVER_IP:5000
+
+You should see the RPS login page.
+Log in with your usual credentials — everything is there.
+
+
+════════════════════════════════════════════════════════════
+STEP 6 — TRANSFER DATA FROM ADMIN DESKTOP  (when ready)
+════════════════════════════════════════════════════════════
+
+If you've been using the app on the desktop and want to move that
+live database to the cloud:
+
+1. On the desktop, find the file:
+       school_fee_app_v3\database\school_fees.db
+2. Also copy the entire receipts folder:
+       school_fee_app_v3\receipts\
+3. Upload school_fees.db to the server using WinSCP:
+   → Replace /root/school_fee_app/database/school_fees.db
+4. Upload the receipts folder contents:
+   → Replace /root/school_fee_app/receipts/
+5. Restart the app on the server:
+       systemctl restart rps_fee_app
+
+Your cloud version now has all the same data.
+
+
+════════════════════════════════════════════════════════════
+DAY-TO-DAY USAGE
+════════════════════════════════════════════════════════════
+
+Access from anywhere:
+  → http://YOUR_SERVER_IP:5000
+  → Works on laptop, phone, tablet, any browser, any internet
+
+The server runs 24/7 — you never need to turn anything on.
+
+Admin desktop staff:    log in as admin1
+Your laptop:            log in as management (or admin2)
+Both can work simultaneously on live data.
+
+
+════════════════════════════════════════════════════════════
+USEFUL COMMANDS (run via SSH if anything goes wrong)
+════════════════════════════════════════════════════════════
+
+Check if app is running:   systemctl status rps_fee_app
+Restart the app:           systemctl restart rps_fee_app
+View live logs:            journalctl -u rps_fee_app -f
+Stop the app:              systemctl stop rps_fee_app
+
+Backup the database:
+  cp /root/school_fee_app/database/school_fees.db \
+     /root/school_fees_backup_$(date +%Y%m%d).db
+
+
+════════════════════════════════════════════════════════════
+MONTHLY BACKUP RECOMMENDATION
+════════════════════════════════════════════════════════════
+
+Once a month, download school_fees.db using WinSCP to your
+laptop as a local backup. The file is small (~1MB) and contains
+everything.
+
+
+════════════════════════════════════════════════════════════
+COSTS
+════════════════════════════════════════════════════════════
+
+Hostinger KVM 1 VPS:   ~₹300–500/month
+Electricity:           ₹0  (runs in their data centre)
+Tailscale:             Not needed anymore — access is direct via IP
+
+============================================================

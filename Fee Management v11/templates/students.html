@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Student Database{% endblock %}
+{% block page_title %}<i class="fas fa-users" style="color:#2980b9"></i> Student Database{% endblock %}
+{% block content %}
+<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+  <input type="text" id="search-s" placeholder="🔍 Search name, ref, father..." class="form-control" style="width:240px;" oninput="filterStudents()"/>
+  <select id="filter-type" class="form-control" style="width:140px;" onchange="filterStudents()">
+    <option value="">All Students</option><option value="RANA">RA + NA (Admitted)</option><option value="RA">RA Only</option><option value="NA">NA Only</option><option value="waiting">No Ref / Waiting</option>
+  </select>
+  <button class="btn btn-sm btn-secondary" onclick="toggleColumnManager()"><i class="fas fa-columns"></i> Columns</button>
+  <button class="btn btn-sm btn-success" onclick="window.location.href='/api/students/export-excel'"><i class="fas fa-file-excel"></i> Export Excel</button>
+  <span id="s-count" style="font-size:12px;color:var(--muted);"></span>
+</div>
+
+<!-- Column visibility manager -->
+<div id="col-manager" style="display:none;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+  <span style="font-size:12px;font-weight:600;color:var(--muted);margin-right:8px;">Show/Hide Columns:</span>
+  <label id="cm-labels"></label>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-database"></i><h3>All Students</h3><span id="s-badge" style="margin-left:auto;font-size:11px;opacity:.8;"></span></div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrapper" style="max-height:70vh;overflow-y:auto;">
+      <table id="s-table">
+        <thead id="s-thead"></thead>
+        <tbody id="s-tbody"></tbody>
+        <tfoot id="s-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Field Modal (password protected) -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3><i class="fas fa-edit"></i> Edit Field</h3>
+    <div class="form-group"><label>Field</label><input class="form-control" id="em-label" readonly/></div>
+    <div class="form-group"><label>New Value</label><input class="form-control" id="em-value"/></div>
+    <div id="em-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('edit-modal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-warning" onclick="doEditField()"><i class="fas fa-save"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Tuition Modal -->
+<div class="modal-overlay" id="tuition-modal">
+  <div class="modal">
+    <h3><i class="fas fa-rupee-sign"></i> Update Tuition Fees</h3>
+    <p>Net Tuition = Gross − Concession.</p>
+    <div class="form-group"><label>Gross Tuition</label><input type="number" class="form-control" id="tm-gross" oninput="calcTmNet()"/></div>
+    <div class="form-group"><label>Concession</label><input type="number" class="form-control" id="tm-conc" oninput="calcTmNet()"/></div>
+    <div class="form-group"><label>Net Tuition (auto)</label><input class="form-control" id="tm-net" readonly style="font-weight:600;"/></div>
+    <div id="tm-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('tuition-modal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-warning" onclick="doEditTuition()"><i class="fas fa-save"></i> Save Fees</button>
+    </div>
+  </div>
+</div>
+
+<!-- Phone Modal -->
+<div class="modal-overlay" id="phone-modal">
+  <div class="modal">
+    <h3><i class="fas fa-phone"></i> Edit Phone Numbers</h3>
+    <p id="pm-name" style="font-weight:600;color:var(--primary);"></p>
+    <div class="form-group"><label>Father Contact</label><input class="form-control" id="pm-father"/></div>
+    <div class="form-group"><label>Mother Contact</label><input class="form-control" id="pm-mother"/></div>
+    <div id="pm-alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('phone-modal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-success" onclick="savePhone()"><i class="fas fa-save"></i> Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let allStudents=[], editId=null, editField=null, phoneId=null, tuitionId=null;
+let hiddenCols = (() => { try { return JSON.parse(localStorage.getItem('hidden_cols_students') || '[]') || []; } catch(e) { return []; } })();
+
+const COL_DEFS = [
+  {key:'#',label:'#',always:true},
+  {key:'ref',label:'Ref No.',always:true},
+  {key:'uid',label:'Student UID'},
+  {key:'doa',label:'Date of Adm.'},
+  {key:'name',label:'Student Name',always:true},
+  {key:'father',label:'Father'},
+  {key:'mother',label:'Mother'},
+  {key:'phone_f',label:'Father Contact'},
+  {key:'phone_m',label:'Mother Contact'},
+  {key:'class',label:'Class'},
+  {key:'section',label:'Section'},
+  {key:'gross',label:'Gross Tuition'},
+  {key:'conc',label:'Concession'},
+  {key:'net',label:'Net Tuition'},
+  {key:'neft',label:'NEFT Paid'},
+  {key:'cash',label:'Cash Paid'},
+  {key:'balance',label:'Balance'},
+  {key:'misc',label:'MISC to Pay'},
+  {key:'status',label:'Status'},
+  {key:'comments',label:'Comments'},
+  {key:'actions',label:'Actions',always:true},
+];
+
+function isVisible(key){ return !hiddenCols.includes(key); }
+function toggleCol(key, visible){
+  if(visible) hiddenCols=hiddenCols.filter(k=>k!==key);
+  else if(!hiddenCols.includes(key)) hiddenCols.push(key);
+  localStorage.setItem('hidden_cols_students', JSON.stringify(hiddenCols));
+  renderStudents(allStudents.filter(s=>passFilter(s)));
+}
+function toggleColumnManager(){
+  const m=document.getElementById('col-manager');
+  if(m.style.display==='none'){
+    m.style.display='flex';
+    const lbl=document.getElementById('cm-labels');
+    lbl.innerHTML='';
+    COL_DEFS.filter(c=>!c.always).forEach(c=>{
+      const l=document.createElement('label');
+      l.style.cssText='display:inline-flex;align-items:center;gap:4px;margin:3px 8px 3px 0;font-size:12px;cursor:pointer;';
+      l.innerHTML=`<input type="checkbox" ${isVisible(c.key)?'checked':''} onchange="toggleCol('${c.key}',this.checked)"> ${c.label}`;
+      lbl.appendChild(l);
+    });
+  } else { m.style.display='none'; }
+}
+
+window.addEventListener('load', async()=>{
+  try {
+    allStudents = await apiGet('/api/students/all');
+    renderStudents(allStudents);
+    document.getElementById('s-count').textContent = allStudents.length+' total';
+  } catch(err) {
+    document.getElementById('s-tbody').innerHTML = `<tr><td colspan="20" style="text-align:center;padding:24px;color:#e74c3c;"><i class="fas fa-exclamation-triangle"></i> Error loading students: ${err.message}. Please refresh.</td></tr>`;
+    console.error('Students load error:', err);
+  }
+});
+
+function passFilter(s){
+  const q=(document.getElementById('search-s').value||'').toLowerCase();
+  const t=document.getElementById('filter-type').value;
+  const matchQ=!q||s.student_name.toLowerCase().includes(q)||(s.father_name||'').toLowerCase().includes(q)||(s.reference_no||'').toLowerCase().includes(q);
+  const matchT=!t||(t==='RANA'&&((s.reference_no||'').startsWith('RA')||(s.reference_no||'').startsWith('NA')))||(t==='RA'&&(s.reference_no||'').startsWith('RA'))||(t==='NA'&&(s.reference_no||'').startsWith('NA'))||(t==='waiting'&&!(s.reference_no||''));
+  return matchQ&&matchT;
+}
+function filterStudents(){ renderStudents(allStudents.filter(passFilter)); }
+
+function renderStudents(data){
+  const visKeys = COL_DEFS.filter(c=>c.always||isVisible(c.key)).map(c=>c.key);
+  const thead = document.getElementById('s-thead');
+  const tbody = document.getElementById('s-tbody');
+  const tfoot = document.getElementById('s-tfoot');
+
+  // Header
+  const hrow = document.createElement('tr');
+  COL_DEFS.filter(c=>visKeys.includes(c.key)).forEach(c=>{
+    const th=document.createElement('th'); th.textContent=c.label; hrow.appendChild(th);
+  });
+  thead.innerHTML=''; thead.appendChild(hrow);
+
+  let tots={gross:0,conc:0,net:0,misc:0,neft:0,cash:0,bal:0};
+  if(!data.length){
+    tbody.innerHTML='<tr><td colspan="'+visKeys.length+'" style="text-align:center;padding:24px;color:var(--muted);">No students found</td></tr>';
+    tfoot.innerHTML=''; return;
+  }
+
+  // Use DocumentFragment - avoids one giant innerHTML string
+  const frag = document.createDocumentFragment();
+  data.forEach((s,i)=>{
+    const bal=(s.net_tuition||0)+(s.misc_to_pay||0)-(s.neft_paid||0)-(s.cash_paid||0);
+    tots.gross+=s.gross_tuition||0; tots.conc+=s.concession||0; tots.net+=s.net_tuition||0;
+    tots.misc+=s.misc_to_pay||0; tots.neft+=s.neft_paid||0; tots.cash+=s.cash_paid||0; tots.bal+=bal;
+    const bc=bal>0?'#e74c3c':bal<0?'#27ae60':'inherit';
+    const ref=s.reference_no||'';
+    const refTag=ref?(ref.startsWith('RA')?'<span class="tag tag-ra">'+ref+'</span>':'<span class="tag tag-na">'+ref+'</span>'):'<span style="color:var(--muted);font-size:10px;">No Ref</span>';
+
+    function mkTd(txt,style){const c=document.createElement('td');if(style)c.setAttribute('style',style);c.textContent=txt===null||txt===undefined?'—':String(txt)||'—';return c;}
+    function editSpan(val,fieldName,labelName){
+      const sp=document.createElement('span');sp.style.cursor='pointer';sp.title='Click to edit';
+      sp.textContent=val||'—';sp.innerHTML+=' <i class="fas fa-pen" style="font-size:9px;color:var(--muted)"></i>';
+      sp.addEventListener('click',function(){editFieldFn(s.id,fieldName,labelName,val||'');});return sp;
+    }
+
+    const cells={
+      '#':()=>{const c=document.createElement('td');c.style.color='var(--muted)';c.textContent=i+1;return c;},
+      'ref':()=>{const c=document.createElement('td');c.innerHTML=refTag;return c;},
+      'uid':()=>mkTd(s.student_uid||'—','font-family:monospace;font-size:11px;color:#8e44ad;font-weight:600;'),
+      'doa':()=>mkTd(isoToDisplay(s.date_of_admission),'font-size:11px'),
+      'name':()=>{
+        const c=document.createElement('td');c.style.fontWeight='600';
+        c.appendChild(editSpan(s.student_name,'student_name','Student Name'));
+        if(s.is_rte){const star=document.createElement('span');star.title='RTE Student';star.style.cssText='color:#8e44ad;font-size:10px;margin-left:3px;';star.textContent='⭐';c.appendChild(star);}
+        return c;
+      },
+      'father':()=>{const c=document.createElement('td');c.style.fontSize='12px';c.appendChild(editSpan(s.father_name,'father_name','Father Name'));return c;},
+      'mother':()=>{const c=document.createElement('td');c.style.fontSize='12px';c.appendChild(editSpan(s.mother_name,'mother_name','Mother Name'));return c;},
+      'phone_f':()=>{const c=document.createElement('td');c.style.fontSize='11px';const a=document.createElement('a');a.href='#';a.textContent=s.father_contact||'—';a.addEventListener('click',function(e){e.preventDefault();openPhone(s.id,s.student_name,s.father_contact||'',s.mother_contact||'');});c.appendChild(a);return c;},
+      'phone_m':()=>mkTd(s.mother_contact,'font-size:11px'),
+      'class':()=>{const c=document.createElement('td');c.appendChild(editSpan(s.class,'class','Class'));return c;},
+      'section':()=>{const c=document.createElement('td');c.appendChild(editSpan(s.section,'section','Section'));return c;},
+      'status':()=>{const c=document.createElement('td');c.style.cssText='font-size:11px;color:'+(s.status==='Admitted'?'#1e8449':'#7d6608');c.textContent=s.status||'—';return c;},
+      'gross':()=>mkTd(s.gross_tuition?formatRs(s.gross_tuition):'—','text-align:right'),
+      'conc':()=>mkTd(s.concession?formatRs(s.concession):'—','text-align:right'),
+      'net':()=>{const c=document.createElement('td');c.style.textAlign='right';const a=document.createElement('a');a.href='#';a.title='Click to edit';a.innerHTML=(s.net_tuition?formatRs(s.net_tuition):'—')+' <i class="fas fa-pen" style="font-size:9px;color:var(--muted)"></i>';a.addEventListener('click',function(e){e.preventDefault();openTuition(s.id,s.gross_tuition||0,s.concession||0);});c.appendChild(a);return c;},
+      'misc':()=>mkTd(s.misc_to_pay?formatRs(s.misc_to_pay):'—','text-align:right'),
+      'neft':()=>mkTd(s.neft_paid?formatRs(s.neft_paid):'—','text-align:right;color:#6c3483'),
+      'cash':()=>mkTd(s.cash_paid?formatRs(s.cash_paid):'—','text-align:right;color:#1e8449'),
+      'balance':()=>{const bal2=(s.net_tuition||0)-(s.neft_paid||0)-(s.cash_paid||0);const bc2=bal2>0?'#e74c3c':bal2<0?'#8e44ad':'#1e8449';const c=document.createElement('td');c.style.cssText='text-align:right;font-weight:700;color:'+bc2;c.textContent=formatRs(Math.abs(bal2))+(bal2>0?' Due':bal2<0?' Overpaid':'');return c;},
+      'comments':()=>{const c=document.createElement('td');c.style.cssText='font-size:11px;max-width:120px';c.appendChild(editSpan(s.comments,'comments','Comments'));return c;},
+      'actions':()=>{const c=document.createElement('td');const btn=document.createElement('button');btn.className='btn btn-sm btn-secondary';btn.title='Edit phones';btn.innerHTML='<i class="fas fa-phone"></i>';btn.addEventListener('click',function(){openPhone(s.id,s.student_name,s.father_contact||'',s.mother_contact||'');});c.appendChild(btn);return c;},
+    };
+
+    const row=document.createElement('tr');
+    visKeys.forEach(k=>row.appendChild(cells[k]?cells[k]():(()=>{const c=document.createElement('td');c.textContent='—';return c;})()));
+    frag.appendChild(row);
+  });
+  tbody.innerHTML='';
+  tbody.appendChild(frag);
+
+  // Footer totals
+  const fr=document.createElement('tr');fr.className='totals-row';
+  const totMap={'#':'','ref':'','doa':'','name':'TOTALS','father':'','mother':'','phone_f':'','phone_m':'','class':'','section':'','status':'','comments':'','actions':'','gross':formatRs(tots.gross),'conc':formatRs(tots.conc),'net':formatRs(tots.net),'misc':formatRs(tots.misc),'neft':formatRs(tots.neft),'cash':formatRs(tots.cash),'balance':formatRs(tots.bal)};
+  visKeys.forEach(k=>{const c=document.createElement('td');c.textContent=totMap[k]||'';if(['gross','conc','net','misc','neft','cash','balance'].includes(k))c.style.textAlign='right';if(k==='name')c.style.textAlign='right';fr.appendChild(c);});
+  tfoot.innerHTML='';tfoot.appendChild(fr);
+
+  document.getElementById('s-count').textContent=data.length+' / '+allStudents.length+' students';
+  document.getElementById('s-badge').textContent=data.length+' shown';
+}
+
+
+function escQ(s){ return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+function editFieldFn(id,field,label,current){
+  editId=id; editField=field;
+  document.getElementById('em-label').value=label;
+  document.getElementById('em-value').value=current;
+  document.getElementById('em-alert').innerHTML='';
+  document.getElementById('edit-modal').classList.add('show');
+}
+async function doEditField(){
+  const res=await apiPost('/api/students/update-field',{student_id:editId,field:editField,value:document.getElementById('em-value').value,password:''});
+  if(res.success){document.getElementById('edit-modal').classList.remove('show');allStudents=await apiGet('/api/students/all');filterStudents();}
+  else showAlert(document.getElementById('em-alert'),'danger',res.error);
+}
+function openTuition(id,gross,conc){
+  tuitionId=id;
+  document.getElementById('tm-gross').value=gross;
+  document.getElementById('tm-conc').value=conc;
+  document.getElementById('tm-net').value=gross-conc;
+  document.getElementById('tm-alert').innerHTML='';
+  document.getElementById('tuition-modal').classList.add('show');
+}
+function calcTmNet(){
+  const g=parseFloat(document.getElementById('tm-gross').value)||0;
+  const c=parseFloat(document.getElementById('tm-conc').value)||0;
+  document.getElementById('tm-net').value=g-c;
+}
+async function doEditTuition(){
+  const res=await apiPost('/api/students/update-tuition',{student_id:tuitionId,gross:parseFloat(document.getElementById('tm-gross').value)||0,concession:parseFloat(document.getElementById('tm-conc').value)||0,password:''});
+  if(res.success){document.getElementById('tuition-modal').classList.remove('show');allStudents=await apiGet('/api/students/all');filterStudents();}
+  else showAlert(document.getElementById('tm-alert'),'danger',res.error);
+}
+function openPhone(id,name,father,mother){
+  phoneId=id;
+  document.getElementById('pm-name').textContent=name;
+  document.getElementById('pm-father').value=father;
+  document.getElementById('pm-mother').value=mother;
+  document.getElementById('pm-alert').innerHTML='';
+  document.getElementById('phone-modal').classList.add('show');
+}
+async function savePhone(){
+  const res=await apiPost('/api/students/update-phone',{student_id:phoneId,father_contact:document.getElementById('pm-father').value,mother_contact:document.getElementById('pm-mother').value});
+  if(res.success){document.getElementById('phone-modal').classList.remove('show');allStudents=await apiGet('/api/students/all');filterStudents();}
+  else showAlert(document.getElementById('pm-alert'),'danger',res.error);
+}
+</script>
+{% endblock %}

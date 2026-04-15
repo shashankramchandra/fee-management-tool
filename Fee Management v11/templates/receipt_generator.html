@@ -1,0 +1,478 @@
+{% extends "base.html" %}
+{% block title %}Receipt Generator{% endblock %}
+{% block page_title %}<i class="fas fa-receipt" style="color:#f39c12"></i> Receipt Generator{% endblock %}
+
+{% block content %}
+<div style="display:grid; grid-template-columns: 1fr 380px; gap:24px; align-items:start;">
+
+  <!-- LEFT: FORM -->
+  <div class="card">
+    <div class="card-header">
+      <i class="fas fa-file-invoice"></i>
+      <h3>Generate Fee Receipt</h3>
+    </div>
+    <div class="card-body">
+
+      <div id="alert-box"></div>
+
+      <!-- FEE TYPE -->
+      <div class="form-group">
+        <label>Fee Type <span class="required">*</span></label>
+        <select class="form-control" id="fee_type" onchange="onFeeTypeChange()">
+          <option value="">— Select Fee Type —</option>
+          <option value="TUITION FEE">TUITION FEE</option>
+          <option value="MISC. FEE">MISC. FEE</option>
+        </select>
+      </div>
+
+      <hr class="section-divider">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+        <i class="fas fa-search"></i> Find Student
+      </div>
+
+      <!-- STUDENT SEARCH -->
+      <div class="form-group">
+        <label>Student Name <span class="required">*</span></label>
+        <div class="search-wrapper">
+          <input type="text" class="form-control" id="student_name"
+                 placeholder="Start typing student name..."
+                 autocomplete="off"
+                 oninput="searchStudent('student')" />
+          <div class="autocomplete-list" id="student-dropdown" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- FATHER NAME -->
+        <div class="form-group">
+          <label>Father Name</label>
+          <div class="search-wrapper">
+            <input type="text" class="form-control" id="father_name"
+                   placeholder="Or search by father..."
+                   autocomplete="off"
+                   oninput="searchStudent('father')" />
+            <div class="autocomplete-list" id="father-dropdown" style="display:none"></div>
+          </div>
+        </div>
+        <!-- MOTHER NAME -->
+        <div class="form-group">
+          <label>Mother Name</label>
+          <div class="search-wrapper">
+            <input type="text" class="form-control" id="mother_name"
+                   placeholder="Or search by mother..."
+                   autocomplete="off"
+                   oninput="searchStudent('mother')" />
+            <div class="autocomplete-list" id="mother-dropdown" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Grade</label>
+          <input type="text" class="form-control" id="grade" readonly placeholder="Auto-filled" />
+        </div>
+        <div class="form-group">
+          <label>Section</label>
+          <input type="text" class="form-control" id="section" readonly placeholder="Auto-filled" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Admission Type</label>
+          <input type="text" class="form-control" id="admission_type" readonly placeholder="Auto-detected" />
+        </div>
+        <div class="form-group">
+          <label>Reference / Reg. No.</label>
+          <input type="text" class="form-control" id="reference_no" readonly placeholder="Auto-filled" style="font-family:monospace;font-weight:600;" />
+        </div>
+      </div>
+
+      <hr class="section-divider">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+        <i class="fas fa-money-bill-wave"></i> Payment Details
+      </div>
+
+      <!-- DATE OF PAYMENT -->
+      <div class="form-group">
+        <label>Date of Payment <span class="required">*</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" class="form-control" id="payment_date" style="flex:1" />
+          <button class="btn btn-secondary" style="white-space:nowrap;" onclick="setToday()">
+            <i class="fas fa-calendar-check"></i> Today
+          </button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- PAYMENT MODE -->
+        <div class="form-group">
+          <label>Payment Mode <span class="required">*</span></label>
+          <select class="form-control" id="payment_mode">
+            <option value="">— Select —</option>
+            <option value="CASH">CASH</option>
+            <option value="NEFT">NEFT</option>
+          </select>
+        </div>
+        <!-- AMOUNT -->
+        <div class="form-group">
+          <label>Amount (₹) <span class="required">*</span></label>
+          <input type="number" class="form-control" id="amount" placeholder="0"
+                 min="0" oninput="updateAmountWords(); checkBalance();" />
+        </div>
+      </div>
+
+      <!-- BALANCE INFO BOX -->
+      <div id="balance-info" style="display:none; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px;">
+      </div>
+
+      <!-- AMOUNT IN WORDS -->
+      <div class="form-group">
+        <label>Amount in Words</label>
+        <div class="amount-words" id="amount_words">—</div>
+      </div>
+
+      <!-- GENERATE BUTTON -->
+      <button class="btn btn-success btn-lg" id="generate-btn" onclick="generateReceipt()">
+        <i class="fas fa-file-pdf"></i> Generate Receipt
+      </button>
+
+    </div>
+  </div>
+
+  <!-- RIGHT: RECEIPT PREVIEW / INFO -->
+  <div>
+    <!-- Counters card -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="background:#2ecc71;">
+        <i class="fas fa-tachometer-alt"></i>
+        <h3>Today's Status</h3>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
+          <div style="background:#eaf4fb;border-radius:8px;padding:14px;">
+            <div style="font-size:28px;font-weight:700;color:var(--primary)" id="cnt-tuition">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Tuition Receipts</div>
+          </div>
+          <div style="background:#eafaf1;border-radius:8px;padding:14px;">
+            <div style="font-size:28px;font-weight:700;color:#1e8449" id="cnt-misc">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">MISC Receipts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Last receipt / success box -->
+    <div id="success-panel" style="display:none;" class="card">
+      <div class="card-header" style="background:#27ae60;">
+        <i class="fas fa-check-circle"></i>
+        <h3>Receipt Generated!</h3>
+      </div>
+      <div class="card-body" style="text-align:center;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Receipt Number</div>
+        <div id="success-receipt-no" style="font-size:18px;font-weight:700;font-family:monospace;color:var(--primary);word-break:break-all;"></div>
+        <div id="success-student" style="margin-top:8px;font-size:14px;color:var(--text);"></div>
+        <div id="success-amount" style="margin-top:4px;font-size:20px;font-weight:700;color:#1e8449;"></div>
+        <div id="success-words" style="font-size:12px;color:var(--muted);margin-top:4px;font-style:italic;"></div>
+        <hr style="margin:16px 0;border-color:var(--border);">
+        <button class="btn btn-primary" style="width:100%;margin-bottom:8px;" id="download-btn" onclick="downloadReceipt()">
+          <i class="fas fa-download"></i> Download PDF Receipt
+        </button>
+        <button class="btn btn-secondary" style="width:100%;font-size:13px;" onclick="resetForm()">
+          <i class="fas fa-plus"></i> New Receipt
+        </button>
+      </div>
+    </div>
+
+    <!-- Tips card -->
+    <div class="card" id="tips-card" style="margin-top:16px;">
+      <div class="card-header" style="background:#8e44ad;">
+        <i class="fas fa-lightbulb"></i>
+        <h3>Quick Tips</h3>
+      </div>
+      <div class="card-body" style="font-size:13px;line-height:1.7;color:var(--muted);">
+        <p><b>1.</b> Select Fee Type first (Tuition or MISC)</p>
+        <p style="margin-top:8px;"><b>2.</b> Type student name to search — it auto-fills all fields</p>
+        <p style="margin-top:8px;"><b>3.</b> Click <b>Today</b> to use today's date automatically</p>
+        <p style="margin-top:8px;"><b>4.</b> After generating, click Download to save the PDF</p>
+        <p style="margin-top:8px;"><b>5.</b> PDFs are saved in <code>receipts/</code> folder automatically</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentReceiptNo = '';
+let searchTimer = null;
+
+// ── SET TODAY ──────────────────────────────────────────────────────────
+function setToday() {
+  setDateToday('payment_date');
+}
+// Auto-set today on load
+window.addEventListener('load', () => {
+  setToday();
+  loadCounts();
+});
+
+// ── FEE TYPE CHANGE ────────────────────────────────────────────────────
+function onFeeTypeChange() {
+  updateBalanceBox();
+  const amount = parseFloat(document.getElementById('amount').value) || 0;
+  if (amount > 0) checkBalance();
+}
+
+// ── STUDENT SEARCH ─────────────────────────────────────────────────────
+function searchStudent(field) {
+  clearTimeout(searchTimer);
+  const inputMap = {student:'student_name', father:'father_name', mother:'mother_name'};
+  const dropMap  = {student:'student-dropdown', father:'father-dropdown', mother:'mother-dropdown'};
+  const query = document.getElementById(inputMap[field]).value.trim();
+  const dropdown = document.getElementById(dropMap[field]);
+
+  if (query.length < 1) { dropdown.style.display='none'; return; }
+
+  searchTimer = setTimeout(async () => {
+    const data = await apiGet(`/api/students/search?q=${encodeURIComponent(query)}&field=${field}`);
+    renderDropdown(data, dropdown, field);
+  }, 200);
+}
+
+function renderDropdown(students, dropdown, field) {
+  if (!students.length) { dropdown.style.display='none'; return; }
+  dropdown.innerHTML = '';
+  students.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'autocomplete-item';
+    div.innerHTML = `<div><b>${s.student_name}</b></div>
+                     <div class="sub">${s.father_name} / ${s.mother_name} &nbsp;|&nbsp; Ref: ${s.reference_no || '—'} &nbsp;|&nbsp; Class ${s.class || '—'}</div>`;
+    div.onclick = () => fillStudentFields(s, dropdown);
+    dropdown.appendChild(div);
+  });
+  dropdown.style.display='block';
+}
+
+function fillStudentFields(student, dropdown) {
+  document.getElementById('student_name').value = student.student_name;
+  document.getElementById('father_name').value  = student.father_name;
+  document.getElementById('mother_name').value  = student.mother_name;
+  document.getElementById('grade').value        = student.class || '';
+  document.getElementById('section').value      = student.section || '';
+  document.getElementById('reference_no').value = student.reference_no || '';
+
+  // Store balance data on the student object for validation
+  window._selectedStudent = student;
+
+  // Admission type
+  const ref = student.reference_no || '';
+  if (ref.startsWith('NA')) document.getElementById('admission_type').value = 'New Admission';
+  else if (ref.startsWith('RA')) document.getElementById('admission_type').value = 'Re-Admission';
+  else document.getElementById('admission_type').value = '';
+
+  // Style filled fields
+  ['student_name','father_name','mother_name','grade','section','reference_no'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.value) el.classList.add('input-filled');
+  });
+
+  // Hide all dropdowns
+  document.querySelectorAll('.autocomplete-list').forEach(d => d.style.display='none');
+
+  // Fetch live balance and show info box
+  loadBalanceInfo(student.student_name);
+  document.getElementById('amount').value = '';
+  document.getElementById('amount_words').textContent = '—';
+  document.getElementById('balance-info').style.display = 'none';
+}
+
+let _liveBalance = null;
+
+async function loadBalanceInfo(name) {
+  _liveBalance = null;
+  if (!name) return;
+  const b = await apiGet('/api/students/balance?name=' + encodeURIComponent(name));
+  if (!b.found) return;
+  _liveBalance = b;
+  updateBalanceBox();
+}
+
+function updateBalanceBox() {
+  if (!_liveBalance) return;
+  const feeType = document.getElementById('fee_type').value;
+  const box = document.getElementById('balance-info');
+  if (feeType.includes('TUITION')) {
+    const bal = _liveBalance.tuition_balance;
+    box.style.background = bal <= 0 ? '#eafaf1' : '#eaf4fb';
+    box.style.border = bal <= 0 ? '1px solid #a9dfbf' : '1px solid #aed6f1';
+    box.innerHTML = `<i class="fas fa-info-circle"></i> &nbsp;
+      <b>Tuition Balance:</b> Net Tuition ₹${Number(_liveBalance.net_tuition).toLocaleString('en-IN')} 
+      − NEFT ₹${Number(_liveBalance.neft_paid).toLocaleString('en-IN')} 
+      − Cash ₹${Number(_liveBalance.cash_paid).toLocaleString('en-IN')} 
+      = <b style="color:${bal>0?'#e74c3c':'#1e8449'}">₹${Number(bal).toLocaleString('en-IN')} ${bal>0?'outstanding':'(fully paid)'}</b>`;
+    box.style.display = 'block';
+  } else if (feeType.includes('MISC')) {
+    const bal = _liveBalance.misc_balance;
+    box.style.background = bal <= 0 ? '#eafaf1' : '#eaf4fb';
+    box.style.border = bal <= 0 ? '1px solid #a9dfbf' : '1px solid #aed6f1';
+    box.innerHTML = `<i class="fas fa-info-circle"></i> &nbsp;
+      <b>MISC Balance:</b> MISC to Pay ₹${Number(_liveBalance.misc_to_pay).toLocaleString('en-IN')} 
+      − Paid ₹${Number(_liveBalance.misc_paid).toLocaleString('en-IN')} 
+      = <b style="color:${bal>0?'#e74c3c':'#1e8449'}">₹${Number(bal).toLocaleString('en-IN')} ${bal>0?'outstanding':'(fully paid)'}</b>`;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function checkBalance() {
+  if (!_liveBalance) return true;
+  const feeType = document.getElementById('fee_type').value;
+  const amount = parseFloat(document.getElementById('amount').value) || 0;
+  if (amount <= 0) return true;
+  const box = document.getElementById('balance-info');
+  if (feeType.includes('TUITION')) {
+    const bal = _liveBalance.tuition_balance;
+    if (amount > bal && bal > 0) {
+      box.style.background = '#fdedec';
+      box.style.border = '1px solid #f5b7b1';
+      box.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e74c3c"></i> &nbsp;
+        <b style="color:#922b21">Warning:</b> Amount entered (₹${Number(amount).toLocaleString('en-IN')}) is <b>greater than the outstanding tuition balance (₹${Number(bal).toLocaleString('en-IN')})</b>. Please verify before proceeding.`;
+      box.style.display = 'block';
+      return false;
+    }
+    if (bal <= 0) {
+      box.style.background = '#eafaf1';
+      box.style.border = '1px solid #a9dfbf';
+      box.innerHTML = `<i class="fas fa-check-circle" style="color:#1e8449"></i> &nbsp;<b style="color:#1e8449">Tuition fees fully paid.</b> No outstanding balance.`;
+      box.style.display = 'block';
+    }
+  } else if (feeType.includes('MISC')) {
+    const bal = _liveBalance.misc_balance;
+    if (amount > bal && bal > 0) {
+      box.style.background = '#fdedec';
+      box.style.border = '1px solid #f5b7b1';
+      box.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e74c3c"></i> &nbsp;
+        <b style="color:#922b21">Warning:</b> Amount entered (₹${Number(amount).toLocaleString('en-IN')}) is <b>greater than MISC outstanding balance (₹${Number(bal).toLocaleString('en-IN')})</b>. Please verify before proceeding.`;
+      box.style.display = 'block';
+      return false;
+    }
+  }
+  updateBalanceBox();
+  return true;
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrapper'))
+    document.querySelectorAll('.autocomplete-list').forEach(d => d.style.display='none');
+});
+
+// ── AMOUNT IN WORDS ────────────────────────────────────────────────────
+let amountTimer = null;
+function updateAmountWords() {
+  clearTimeout(amountTimer);
+  const amount = document.getElementById('amount').value;
+  if (!amount || amount <= 0) {
+    document.getElementById('amount_words').textContent = '—';
+    return;
+  }
+  amountTimer = setTimeout(async () => {
+    const data = await apiGet(`/api/utils/rupees-in-words?amount=${amount}`);
+    document.getElementById('amount_words').textContent = data.words || '—';
+  }, 300);
+}
+
+// ── LOAD COUNTS ───────────────────────────────────────────────────────
+async function loadCounts() {
+  const data = await apiGet('/api/receipt/counts');
+  document.getElementById('cnt-tuition').textContent = data.tuition_receipt || 0;
+  document.getElementById('cnt-misc').textContent    = data.misc_receipt || 0;
+}
+
+// ── GENERATE RECEIPT ──────────────────────────────────────────────────
+async function generateReceipt() {
+  const alertBox = document.getElementById('alert-box');
+  alertBox.innerHTML = '';
+  
+  const payload = {
+    fee_type:     document.getElementById('fee_type').value,
+    student_name: document.getElementById('student_name').value.trim(),
+    parent_name:  document.getElementById('father_name').value.trim(),
+    father_name:  document.getElementById('father_name').value.trim(),
+    mother_name:  document.getElementById('mother_name').value.trim(),
+    grade:        document.getElementById('grade').value.trim(),
+    section:      document.getElementById('section').value.trim(),
+    reference_no: document.getElementById('reference_no').value.trim(),
+    payment_date: getDateDisplay('payment_date'),
+    payment_mode: document.getElementById('payment_mode').value,
+    amount:       document.getElementById('amount').value,
+  };
+
+  // Client-side quick validation
+  if (!payload.fee_type)      return showAlert(alertBox, 'danger', 'Please select a Fee Type first.');
+  if (!payload.student_name)  return showAlert(alertBox, 'danger', 'Please search and select a student.');
+  if (!payload.reference_no)  return showAlert(alertBox, 'danger', 'Reference number missing. Please reselect the student.');
+  if (!payload.payment_mode)  return showAlert(alertBox, 'danger', 'Please select a Payment Mode.');
+  if (!payload.amount || payload.amount <= 0) return showAlert(alertBox, 'danger', 'Please enter a valid Amount.');
+  if (!payload.payment_date)  return showAlert(alertBox, 'danger', 'Please select a Payment Date.');
+
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating...';
+  setStatus('processing');
+
+  try {
+    const result = await apiPost('/api/receipt/generate', payload);
+
+    if (result.success) {
+      currentReceiptNo = result.receipt_no;
+
+      // Show success panel
+      document.getElementById('success-panel').style.display = 'block';
+      document.getElementById('tips-card').style.display = 'none';
+      document.getElementById('success-receipt-no').textContent = result.receipt_no;
+      document.getElementById('success-student').textContent = payload.student_name;
+      document.getElementById('success-amount').textContent = '₹' + Number(payload.amount).toLocaleString('en-IN');
+      document.getElementById('success-words').textContent = result.amount_words;
+
+      loadCounts();
+      showAlert(alertBox, 'success', `✅ Receipt <b>${result.receipt_no}</b> generated and saved successfully!`);
+    } else {
+      const errs = (result.errors || [result.error || 'Unknown error']).join('<br>• ');
+      showAlert(alertBox, 'danger', '❌ Could not generate receipt:<br>• ' + errs);
+    }
+  } catch (err) {
+    showAlert(alertBox, 'danger', 'Server error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate Receipt';
+    setStatus('ready');
+  }
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────────
+function downloadReceipt() {
+  if (!currentReceiptNo) return;
+  window.location.href = `/api/receipt/download/${encodeURIComponent(currentReceiptNo)}`;
+}
+
+// ── RESET FORM ────────────────────────────────────────────────────────
+function resetForm() {
+  ['fee_type','student_name','father_name','mother_name','grade','section',
+   'admission_type','reference_no','payment_mode','amount'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('amount_words').textContent = '—';
+  document.getElementById('alert-box').innerHTML = '';
+  document.getElementById('success-panel').style.display = 'none';
+  document.getElementById('tips-card').style.display = 'block';
+  document.querySelectorAll('.input-filled').forEach(el => el.classList.remove('input-filled'));
+  setToday();
+  currentReceiptNo = '';
+}
+</script>
+{% endblock %}

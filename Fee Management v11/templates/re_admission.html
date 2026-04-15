@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Re-Admission{% endblock %}
+{% block page_title %}<i class="fas fa-redo" style="color:#27ae60"></i> Re-Admission{% endblock %}
+{% block content %}
+<div style="max-width:700px;margin:0 auto;">
+<div class="card" style="overflow:visible;">
+  <div class="card-header" style="background:#1e8449;"><i class="fas fa-search"></i><h3>Find Existing Student</h3></div>
+  <div class="card-body">
+    <div class="alert alert-info"><i class="fas fa-info-circle"></i><div>Search for a student who is already in the database but has <b>no reference number</b> yet — these are students from previous years. Select them to assign a <b>RA-XXX</b> number.</div></div>
+    <div class="form-group">
+      <label>Search Student Name</label>
+      <div class="search-wrapper">
+        <input type="text" class="form-control" id="search-existing" placeholder="Type name to search existing students without ref number..." autocomplete="off" oninput="searchExisting()"/>
+        <div class="autocomplete-list" id="existing-dropdown" style="display:none;min-width:500px;"></div>
+      </div>
+    </div>
+    <div id="selected-info" style="display:none;background:#eafaf1;border:1px solid #a9dfbf;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#1e8449;margin-bottom:6px;"><i class="fas fa-user-check"></i> Selected Student</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;" id="selected-details"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;" id="form-card">
+  <div class="card-header" style="background:#1a5276;"><i class="fas fa-redo"></i><h3>Re-Admission Details</h3></div>
+  <div class="card-body">
+    <div id="alert-box"></div>
+    <div class="form-group"><label>Date of Admission</label><input type="date" class="form-control" id="date_of_admission"/></div>
+    <div class="form-group"><label>Student Name <span class="req">*</span></label><input type="text" class="form-control" id="student_name" placeholder="Full name"/></div>
+    <div class="grid-2">
+      <div class="form-group"><label>Father Name <span class="req">*</span></label><input type="text" class="form-control" id="father_name" placeholder="Father's full name"/></div>
+      <div class="form-group"><label>Mother Name <span class="req">*</span></label><input type="text" class="form-control" id="mother_name" placeholder="Mother's full name"/></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label>Father Contact</label><input type="tel" class="form-control" id="father_contact" placeholder="Phone number"/></div>
+      <div class="form-group"><label>Mother Contact</label><input type="tel" class="form-control" id="mother_contact" placeholder="Phone number"/></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label>Grade / Class <span class="req">*</span></label><input type="text" class="form-control" id="grade" placeholder="e.g. 10, M1"/></div>
+      <div class="form-group"><label>Section</label>
+        <select class="form-control" id="section">
+          <option value="">— Select —</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+        </select>
+      </div>
+    </div>
+    <div style="background:#fef9e7;border:1px solid #f39c12;border-radius:6px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:700;color:#d35400;margin-bottom:8px;">
+        <i class="fas fa-exclamation-triangle"></i> Fee details are MANDATORY before RA number is assigned
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label>Gross Tuition Fee <span class="req">*</span></label><input type="number" class="form-control" id="gross_tuition" placeholder="Required" min="0" oninput="calcNet()"/></div>
+        <div class="form-group"><label>Concession (if any)</label><input type="number" class="form-control" id="concession" placeholder="0" min="0" oninput="calcNet()"/></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label>Net Tuition Fee</label><input type="number" class="form-control" id="net_tuition" readonly style="font-weight:600;background:#eafaf1;"/></div>
+        <div class="form-group"><label>MISC to be Paid <span class="req">*</span></label><input type="number" class="form-control" id="misc_to_pay" placeholder="Required" min="0"/></div>
+      </div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="is_rte" style="width:18px;height:18px;cursor:pointer;"/>
+      <label for="is_rte" style="margin:0;cursor:pointer;font-weight:600;color:#8e44ad;">
+        <i class="fas fa-star" style="color:#8e44ad;font-size:11px;"></i> RTE Student (Right to Education)
+      </label>
+    </div>
+    <div class="form-group"><label>Admission Type</label><input type="text" class="form-control" value="RA (Re-Admission)" readonly style="background:#eafaf1;color:#1e8449;font-weight:600;"/></div>
+    <button class="btn btn-success btn-lg" id="save-btn" onclick="saveReadmission()"><i class="fas fa-save"></i> Assign RA Number &amp; Save</button>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let selectedStudentId = null;
+let searchTimer = null;
+window.addEventListener('load',()=>{
+  setDateToday('date_of_admission');
+});
+function calcNet(){
+  const g=parseFloat(document.getElementById('gross_tuition').value)||0;
+  const c=parseFloat(document.getElementById('concession').value)||0;
+  document.getElementById('net_tuition').value=g-c;
+}
+function searchExisting(){
+  clearTimeout(searchTimer);
+  const q=document.getElementById('search-existing').value.trim();
+  const dd=document.getElementById('existing-dropdown');
+  if(q.length<1){dd.style.display='none';return;}
+  searchTimer=setTimeout(async()=>{
+    const results=await apiGet(`/api/students/search?q=${encodeURIComponent(q)}&field=student&no_ref=1`);
+    if(!results.length){dd.innerHTML='<div class="autocomplete-item" style="color:var(--muted);">No students without ref found matching "'+q+'"</div>';dd.style.display='block';return;}
+    dd.innerHTML=results.map(s=>`
+      <div class="autocomplete-item" onclick="selectExistingStudent(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+        <div style="font-weight:600;font-size:13px;">${s.student_name||'—'}</div>
+        <div class="sub">Father: ${s.father_name||'—'} &nbsp;|&nbsp; Mother: ${s.mother_name||'—'} &nbsp;|&nbsp; Class: ${s.class||'—'}</div>
+        <div class="sub">📞 ${s.father_contact||'—'}</div>
+      </div>`).join('');
+    dd.style.display='block';
+  },250);
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrapper')) document.getElementById('existing-dropdown').style.display='none';});
+function selectExistingStudent(s){
+  selectedStudentId=s.id;
+  document.getElementById('existing-dropdown').style.display='none';
+  document.getElementById('search-existing').value=s.student_name;
+  // Fill the form
+  document.getElementById('student_name').value=s.student_name||'';
+  document.getElementById('father_name').value=s.father_name||'';
+  document.getElementById('mother_name').value=s.mother_name||'';
+  document.getElementById('father_contact').value=s.father_contact||'';
+  document.getElementById('mother_contact').value=s.mother_contact||'';
+  document.getElementById('grade').value=s.class||'';
+  document.getElementById('gross_tuition').value=s.gross_tuition||'';
+  document.getElementById('net_tuition').value=s.net_tuition||'';
+  document.getElementById('misc_to_pay').value=s.misc_to_pay||'';
+  // Show info box
+  document.getElementById('selected-details').innerHTML=`
+    <div><b>Name:</b> ${s.student_name}</div><div><b>Class:</b> ${s.class||'—'}</div>
+    <div><b>Father:</b> ${s.father_name}</div><div><b>Mother:</b> ${s.mother_name}</div>
+    <div><b>Contact:</b> ${s.father_contact||'—'}</div><div><b>Status:</b> No Reference Yet</div>`;
+  document.getElementById('selected-info').style.display='block';
+}
+async function saveReadmission(){
+  const alertBox=document.getElementById('alert-box'); alertBox.innerHTML='';
+  const payload={
+    student_id: selectedStudentId,
+    admission_type:'RA',
+    date_of_admission:getDateDisplay('date_of_admission'),
+    student_name:document.getElementById('student_name').value.trim(),
+    father_name:document.getElementById('father_name').value.trim(),
+    mother_name:document.getElementById('mother_name').value.trim(),
+    father_contact:document.getElementById('father_contact').value.trim(),
+    mother_contact:document.getElementById('mother_contact').value.trim(),
+    grade:document.getElementById('grade').value.trim(),
+    section:document.getElementById('section').value,
+    gross_tuition:parseFloat(document.getElementById('gross_tuition').value)||0,
+    concession:parseFloat(document.getElementById('concession').value)||0,
+    net_tuition:parseFloat(document.getElementById('net_tuition').value)||0,
+    misc_to_pay:parseFloat(document.getElementById('misc_to_pay').value)||0,
+    is_rte:document.getElementById('is_rte').checked ? 1 : 0,
+  };
+  if(!payload.student_name) return showAlert(alertBox,'danger','Student Name is required.');
+  if(!payload.father_name)  return showAlert(alertBox,'danger','Father Name is required.');
+  if(!payload.mother_name)  return showAlert(alertBox,'danger','Mother Name is required.');
+  if(!payload.grade)        return showAlert(alertBox,'danger','Grade is required.');
+  if(!payload.gross_tuition) return showAlert(alertBox,'danger','Gross Tuition Fee is mandatory before RA number is assigned.');
+  if(!payload.misc_to_pay)   return showAlert(alertBox,'danger','MISC to be Paid is mandatory before RA number is assigned.');
+  const btn=document.getElementById('save-btn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving...';
+  try{
+    let result;
+    if(selectedStudentId){
+      result=await apiPost('/api/students/assign-ref',payload);
+    } else {
+      payload.admission_type='RA';
+      result=await apiPost('/api/students/add',payload);
+    }
+    if(result.success){
+      const rteTag = payload.is_rte ? ' ⭐ RTE' : '';
+      showAlert(alertBox,'success',`✅ Re-Admission saved!<br><b>Reference: ${result.ref_no}</b> | Student ID: <b>${result.student_uid||'—'}</b>${rteTag}`);
+      document.getElementById('search-existing').value='';
+      document.getElementById('selected-info').style.display='none';
+      selectedStudentId=null;
+      ['student_name','father_name','mother_name','father_contact','mother_contact','grade','gross_tuition','concession','net_tuition','misc_to_pay'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('section').value='';
+      document.getElementById('is_rte').checked=false;
+    }else{showAlert(alertBox,'danger','❌ '+result.error);}
+  }catch(e){showAlert(alertBox,'danger','Error: '+e.message);}
+  finally{btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Assign RA Number &amp; Save';}
+}
+</script>
+{% endblock %}
