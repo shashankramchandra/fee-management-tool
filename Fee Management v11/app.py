@@ -589,6 +589,35 @@ def api_nuke_misc():
     d = request.json
     return jsonify(nuke_all_misc(d.get("password", "")))
 
+# ── API: GIT UPDATE ──────────────────────────────────────────────────────────
+@app.route("/api/git-pull", methods=["POST"])
+@require_login
+def api_git_pull():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=_app_dir,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        output = (result.stdout + result.stderr).strip()
+        success = result.returncode == 0
+        already_updated = "Already up to date" in output
+        return jsonify({
+            "success": success,
+            "output": output,
+            "already_updated": already_updated,
+            "restart_needed": success and not already_updated
+        })
+    except FileNotFoundError:
+        return jsonify({"success": False, "output": "Git is not installed. Please contact your administrator.", "already_updated": False, "restart_needed": False})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "output": "Update timed out. Check your internet connection and try again.", "already_updated": False, "restart_needed": False})
+    except Exception as e:
+        return jsonify({"success": False, "output": str(e), "already_updated": False, "restart_needed": False})
+
 
 if __name__ == "__main__":
     ip = get_local_ip()

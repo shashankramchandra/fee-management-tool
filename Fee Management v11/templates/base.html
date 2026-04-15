@@ -125,12 +125,70 @@ tfoot td{background:#1a3a4f;color:#fff;font-weight:700;padding:8px 10px;font-siz
     <a href="#" onclick="openNukeMisc();return false;" style="color:rgba(220,80,60,.75);border-left-color:transparent;" onmouseover="this.style.background='rgba(180,30,30,.2)';this.style.color='#ff8080';" onmouseout="this.style.background='';this.style.color='rgba(220,80,60,.75)';"><i class="fas fa-fire"></i><span>FIRE</span></a>
     <a href="/management" id="mgmt-link" style="display:none" class="{% if request.path=='/management' %}active{% endif %}{% if session.get('role')=='management' %} show-mgmt{% endif %}"><i class="fas fa-shield-alt"></i><span>Management</span></a>
   </div>
+  <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.15);">
+    <button onclick="openUpdateModal()" style="width:100%;background:#27ae60;color:#fff;border:none;border-radius:7px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s;" onmouseover="this.style.background='#219a52'" onmouseout="this.style.background='#27ae60'">
+      <i class="fas fa-cloud-download-alt"></i> Latest Update
+    </button>
+  </div>
   <div class="sidebar-user">
     <div class="uname" id="sb-username">—</div>
     <div class="urole" id="sb-role">—</div>
     <a href="/logout" style="font-size:11px;color:rgba(255,255,255,.5);text-decoration:none;display:block;margin-top:5px;"><i class="fas fa-sign-out-alt"></i> Logout</a>
   </div>
 </nav>
+
+<!-- LATEST UPDATE MODAL -->
+<div class="modal-overlay" id="update-modal">
+  <div class="modal" style="max-width:420px;text-align:center;">
+    <div style="font-size:36px;margin-bottom:10px;" id="update-icon">🔄</div>
+    <h3 id="update-title" style="margin-bottom:8px;">Checking for Updates...</h3>
+    <p id="update-msg" style="color:var(--muted);font-size:13px;margin-bottom:10px;">Pulling latest changes from GitHub, please wait...</p>
+    <div id="update-output" style="display:none;background:#f4f6f7;border-radius:6px;padding:9px 12px;font-size:11px;font-family:monospace;text-align:left;max-height:130px;overflow-y:auto;margin-bottom:12px;color:#555;word-break:break-all;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-secondary" id="update-close-btn" style="display:none;" onclick="document.getElementById('update-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+<script>
+function openUpdateModal(){
+  var modal=document.getElementById('update-modal');
+  document.getElementById('update-icon').textContent='🔄';
+  document.getElementById('update-title').textContent='Checking for Updates...';
+  document.getElementById('update-msg').textContent='Pulling latest changes from GitHub, please wait...';
+  document.getElementById('update-output').style.display='none';
+  document.getElementById('update-output').textContent='';
+  document.getElementById('update-close-btn').style.display='none';
+  modal.classList.add('show');
+  fetch('/api/git-pull',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      document.getElementById('update-close-btn').style.display='';
+      if(data.already_updated){
+        document.getElementById('update-icon').textContent='✅';
+        document.getElementById('update-title').textContent='Already Up to Date';
+        document.getElementById('update-msg').textContent='The app is already on the latest version. No changes needed.';
+      } else if(data.success){
+        document.getElementById('update-icon').textContent='✅';
+        document.getElementById('update-title').textContent='Update Downloaded!';
+        document.getElementById('update-msg').textContent='New changes have been downloaded. Please close the app window and re-open it from START.bat to apply the update.';
+      } else {
+        document.getElementById('update-icon').textContent='❌';
+        document.getElementById('update-title').textContent='Update Failed';
+        document.getElementById('update-msg').textContent='Could not update. Check internet connection or contact your administrator.';
+      }
+      if(data.output){
+        document.getElementById('update-output').textContent=data.output;
+        document.getElementById('update-output').style.display='block';
+      }
+    })
+    .catch(function(){
+      document.getElementById('update-close-btn').style.display='';
+      document.getElementById('update-icon').textContent='❌';
+      document.getElementById('update-title').textContent='Error';
+      document.getElementById('update-msg').textContent='Could not connect. Please try again.';
+    });
+}
+</script>
 
 <!-- FIRE MODAL -->
 <div class="modal-overlay" id="nuke-misc-modal" style="z-index:9999;">
