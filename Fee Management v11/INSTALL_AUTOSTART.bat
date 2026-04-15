@@ -2,15 +2,23 @@
 setlocal EnableDelayedExpansion
 
 REM ── Auto-elevate: relaunch as admin if not already ─────────────────
-REM Guard: if we were already relaunched with --elevated, skip the check
-if /i "%~1"=="--elevated" goto :already_admin
+REM Use a temp guard file to prevent infinite re-launch loops.
+REM (Argument-based guards break when the path has spaces.)
+set "GUARD=%TEMP%\rps_fee_elevating.tmp"
 
-REM Reliable admin check via PowerShell (net session is unreliable on many systems)
+REM If guard file exists we were relaunched elevated — delete it and continue
+if exist "%GUARD%" (
+    del "%GUARD%" >nul 2>&1
+    goto :already_admin
+)
+
+REM Reliable admin check via PowerShell IsInRole (net session is unreliable)
 powershell -NoProfile -Command "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)" 2>nul | findstr /i "True" >nul
 if %errorlevel% equ 0 goto :already_admin
 
-REM Not admin — relaunch elevated, passing --elevated flag to prevent looping
-powershell -WindowStyle Hidden -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" --elevated' -Verb RunAs -Wait"
+REM Not admin — drop guard file then relaunch elevated (no args needed)
+echo . > "%GUARD%"
+powershell -WindowStyle Hidden -Command "Start-Process cmd.exe -ArgumentList '/c \"%~f0\"' -Verb RunAs -Wait"
 exit /b
 
 :already_admin
