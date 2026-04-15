@@ -2,11 +2,18 @@
 setlocal EnableDelayedExpansion
 
 REM ── Auto-elevate: relaunch as admin if not already ─────────────────
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    powershell -WindowStyle Hidden -Command "Start-Process cmd.exe -ArgumentList '/c \"%~f0\"' -Verb RunAs -Wait"
-    exit /b
-)
+REM Guard: if we were already relaunched with --elevated, skip the check
+if /i "%~1"=="--elevated" goto :already_admin
+
+REM Reliable admin check via PowerShell (net session is unreliable on many systems)
+powershell -NoProfile -Command "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)" 2>nul | findstr /i "True" >nul
+if %errorlevel% equ 0 goto :already_admin
+
+REM Not admin — relaunch elevated, passing --elevated flag to prevent looping
+powershell -WindowStyle Hidden -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" --elevated' -Verb RunAs -Wait"
+exit /b
+
+:already_admin
 
 title RPS Fee Management - Installer
 cls
